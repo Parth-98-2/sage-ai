@@ -65,3 +65,9 @@ CREATE TABLE IF NOT EXISTS passages (
 
 CREATE INDEX IF NOT EXISTS idx_passages_document_id ON passages(document_id);
 CREATE INDEX IF NOT EXISTS idx_passages_source_id ON passages(source_id);
+
+ALTER TABLE passages
+  ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_passages_search_vector ON passages USING GIN (search_vector);

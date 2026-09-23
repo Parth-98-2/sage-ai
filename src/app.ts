@@ -3,6 +3,7 @@ import { ingestRouter } from "./routes/ingest";
 import { documentsRouter } from "./routes/documents";
 import { peopleRouter } from "./routes/people";
 import { sourcesRouter } from "./routes/sources";
+import { searchRouter } from "./routes/search";
 
 export function createApp() {
   const app = express();
@@ -15,6 +16,7 @@ export function createApp() {
   app.use("/documents", documentsRouter);
   app.use("/people", peopleRouter);
   app.use("/sources", sourcesRouter);
+  app.use("/search", searchRouter);
 
   return app;
 }

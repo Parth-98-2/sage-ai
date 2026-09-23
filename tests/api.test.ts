@@ -38,6 +38,7 @@ describe("POST /ingest/text-file", () => {
     expect(getRes.status).toBe(200);
     expect(getRes.body.document.id).toBe(ingestRes.body.document.id);
     expect(getRes.body.passages.length).toBe(ingestRes.body.passages.length);
+    expect(getRes.body.passages[0]).not.toHaveProperty("search_vector");
   });
 
   it("rejects a request with no file", async () => {

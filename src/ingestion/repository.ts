@@ -12,7 +12,8 @@ export async function getDocumentWithPassages(documentId: string): Promise<Docum
   if (!document) return null;
 
   const passagesResult = await pool.query<PassageRow>(
-    `SELECT * FROM passages WHERE document_id = $1 ORDER BY ordinal ASC`,
+    `SELECT id, document_id, source_id, ordinal, text, char_start, char_end, token_count, metadata, created_at
+     FROM passages WHERE document_id = $1 ORDER BY ordinal ASC`,
     [documentId]
   );
 
