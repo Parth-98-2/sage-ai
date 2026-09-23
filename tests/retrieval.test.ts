@@ -69,10 +69,11 @@ describe("GET /search matching and ranking", () => {
   });
 
   it("breaks score ties by passage id ascending", async () => {
-    const text = "Stillness is the key to clear judgement.";
-    await ingest({ rawText: text });
-    await ingest({ rawText: text });
-    await ingest({ rawText: text });
+    // Distinct documents (identical text would now be deduplicated) that
+    // each mention the query term once, so their scores tie.
+    await ingest({ rawText: "Stillness is the key to clear judgement." });
+    await ingest({ rawText: "Stillness is the key to calm judgement." });
+    await ingest({ rawText: "Stillness is the key to sound judgement." });
 
     const res = await search({ q: "stillness" });
     const ids = res.body.results.map((r: { passage: { id: string } }) => r.passage.id);

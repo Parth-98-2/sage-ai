@@ -90,6 +90,8 @@ export interface IngestResult {
   source: SourceRow;
   document: DocumentRow;
   passages: PassageRow[];
+  /** True when an identical document already existed for the source and was returned instead. */
+  duplicate: boolean;
 }
 
 export class ValidationError extends Error {}

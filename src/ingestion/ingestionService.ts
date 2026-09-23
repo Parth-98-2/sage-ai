@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { chunkText } from "./chunker";
+import { normalizeText } from "./textNormalization";
 import {
   ALLOWED_INGESTION_METHODS,
   ALLOWED_PERSON_ROLES,
@@ -15,8 +16,58 @@ import {
   type SourceRow,
 } from "./types";
 
-function validate(input: IngestTextInput): { personRole: string } {
-  if (!input.rawText || input.rawText.trim().length === 0) {
+interface ValidatedInput {
+  rawText: string;
+  personRole: string;
+  externalUrl?: string;
+  publishedAt?: string;
+}
+
+const DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Treats a missing or blank optional field as absent. */
+function optionalField(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function validatePublishedAt(value: string | undefined): string | undefined {
+  const publishedAt = optionalField(value);
+  if (publishedAt === undefined) return undefined;
+
+  const match = DATE_REGEX.exec(publishedAt);
+  const [year, month, day] = match ? match.slice(1).map(Number) : [];
+  const date = match ? new Date(Date.UTC(year, month - 1, day)) : null;
+  if (
+    !date ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new ValidationError("publishedAt must be a valid date in YYYY-MM-DD format");
+  }
+  return publishedAt;
+}
+
+function validateExternalUrl(value: string | undefined): string | undefined {
+  const externalUrl = optionalField(value);
+  if (externalUrl === undefined) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(externalUrl);
+  } catch {
+    throw new ValidationError("externalUrl must be a valid http(s) URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ValidationError("externalUrl must be a valid http(s) URL");
+  }
+  return externalUrl;
+}
+
+function validate(input: IngestTextInput): ValidatedInput {
+  const rawText = normalizeText(input.rawText ?? "");
+  if (rawText.trim().length === 0) {
     throw new ValidationError("rawText must not be empty");
   }
   if (!input.personName || input.personName.trim().length === 0) {
@@ -35,7 +86,12 @@ function validate(input: IngestTextInput): { personRole: string } {
   if (!(ALLOWED_INGESTION_METHODS as readonly string[]).includes(input.ingestionMethod)) {
     throw new ValidationError(`ingestionMethod must be one of: ${ALLOWED_INGESTION_METHODS.join(", ")}`);
   }
-  return { personRole };
+  return {
+    rawText,
+    personRole,
+    externalUrl: validateExternalUrl(input.externalUrl),
+    publishedAt: validatePublishedAt(input.publishedAt),
+  };
 }
 
 async function resolvePerson(client: PoolClient, name: string): Promise<PersonRow> {
@@ -78,6 +134,44 @@ async function linkSourcePerson(
      ON CONFLICT (source_id, person_id, role) DO NOTHING`,
     [sourceId, personId, role]
   );
+}
+
+/**
+ * Serialises ingestion of the same text into the same source for the rest of
+ * the transaction, so concurrent identical uploads cannot both miss the
+ * duplicate check and insert two documents.
+ */
+async function lockSourceChecksum(client: PoolClient, sourceId: string, checksum: string): Promise<void> {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))`, [
+    sourceId,
+    checksum,
+  ]);
+}
+
+async function findDocumentByChecksum(
+  client: PoolClient,
+  sourceId: string,
+  checksum: string
+): Promise<DocumentRow | null> {
+  const result = await client.query<DocumentRow>(
+    `SELECT id, source_id, ingestion_method, original_filename, original_file_path, source_url,
+            mime_type, raw_text, checksum, status, error_message, created_at, updated_at
+     FROM documents
+     WHERE source_id = $1 AND checksum = $2
+     ORDER BY created_at ASC, id ASC
+     LIMIT 1`,
+    [sourceId, checksum]
+  );
+  return result.rows[0] ?? null;
+}
+
+async function listPassages(client: PoolClient, documentId: string): Promise<PassageRow[]> {
+  const result = await client.query<PassageRow>(
+    `SELECT id, document_id, source_id, ordinal, text, char_start, char_end, token_count, metadata, created_at
+     FROM passages WHERE document_id = $1 ORDER BY ordinal ASC`,
+    [documentId]
+  );
+  return result.rows;
 }
 
 async function createDocument(
@@ -128,8 +222,14 @@ async function createPassages(
   return rows;
 }
 
+/**
+ * Ingests text idempotently per source: if the source already has a document
+ * with the same checksum (of the normalised text), that document and its
+ * passages are returned with duplicate=true and nothing new is created. The
+ * uploader's person/role link is still recorded either way.
+ */
 export async function ingestText(input: IngestTextInput): Promise<IngestResult> {
-  const { personRole } = validate(input);
+  const { rawText, personRole, externalUrl, publishedAt } = validate(input);
 
   const client = await pool.connect();
   try {
@@ -140,26 +240,35 @@ export async function ingestText(input: IngestTextInput): Promise<IngestResult> 
       client,
       input.suggestedTitle.trim(),
       input.sourceType,
-      input.externalUrl,
-      input.publishedAt
+      externalUrl,
+      publishedAt
     );
     await linkSourcePerson(client, source.id, person.id, personRole);
 
-    const checksum = crypto.createHash("sha256").update(input.rawText).digest("hex");
+    const checksum = crypto.createHash("sha256").update(rawText).digest("hex");
+    await lockSourceChecksum(client, source.id, checksum);
+
+    const existing = await findDocumentByChecksum(client, source.id, checksum);
+    if (existing) {
+      const passages = await listPassages(client, existing.id);
+      await client.query("COMMIT");
+      return { person, source, document: existing, passages, duplicate: true };
+    }
+
     const document = await createDocument(client, {
       sourceId: source.id,
       ingestionMethod: input.ingestionMethod,
-      rawText: input.rawText,
+      rawText,
       checksum,
       originalFilename: input.originalFilename,
       mimeType: input.mimeType,
     });
 
-    const chunks = chunkText(input.rawText);
+    const chunks = chunkText(rawText);
     const passages = await createPassages(client, document.id, source.id, chunks);
 
     await client.query("COMMIT");
-    return { person, source, document, passages };
+    return { person, source, document, passages, duplicate: false };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

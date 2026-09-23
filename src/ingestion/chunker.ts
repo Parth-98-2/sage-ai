@@ -11,6 +11,7 @@ interface Range {
 }
 
 const PARAGRAPH_REGEX = /[^\r\n]+(?:\r?\n(?!\s*\r?\n)[^\r\n]*)*/g;
+const LINE_REGEX = /[^\r\n]+/g;
 const WORD_REGEX = /\S+/g;
 
 /**
@@ -24,31 +25,52 @@ function countTokens(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-function extractParagraphs(rawText: string): Range[] {
-  const paragraphs: Range[] = [];
+function matchRanges(rawText: string, range: Range, regex: RegExp): Range[] {
+  const slice = rawText.slice(range.start, range.end);
+  const ranges: Range[] = [];
   let match: RegExpExecArray | null;
-  PARAGRAPH_REGEX.lastIndex = 0;
-  while ((match = PARAGRAPH_REGEX.exec(rawText)) !== null) {
-    paragraphs.push({ start: match.index, end: match.index + match[0].length });
+  regex.lastIndex = 0;
+  while ((match = regex.exec(slice)) !== null) {
+    ranges.push({ start: range.start + match.index, end: range.start + match.index + match[0].length });
   }
-  return paragraphs;
+  return ranges;
+}
+
+/** Shrinks a range to its non-whitespace bounds; null if it is all whitespace. */
+function trimRange(rawText: string, range: Range): Range | null {
+  let { start, end } = range;
+  while (start < end && /\s/.test(rawText[start])) start++;
+  while (end > start && /\s/.test(rawText[end - 1])) end--;
+  return start < end ? { start, end } : null;
 }
 
 function splitRangeIntoWordWindows(rawText: string, range: Range, targetTokens: number): Range[] {
-  const slice = rawText.slice(range.start, range.end);
-  const words: Range[] = [];
-  let match: RegExpExecArray | null;
-  WORD_REGEX.lastIndex = 0;
-  while ((match = WORD_REGEX.exec(slice)) !== null) {
-    words.push({ start: range.start + match.index, end: range.start + match.index + match[0].length });
-  }
-
+  const words = matchRanges(rawText, range, WORD_REGEX);
   const windows: Range[] = [];
   for (let i = 0; i < words.length; i += targetTokens) {
     const group = words.slice(i, i + targetTokens);
     windows.push({ start: group[0].start, end: group[group.length - 1].end });
   }
   return windows;
+}
+
+/**
+ * Breaks an oversized paragraph into lines (e.g. transcript speaker turns
+ * separated by single newlines). Only a line that is itself oversized falls
+ * back to fixed-size word windows.
+ */
+function splitOversizedParagraph(rawText: string, paragraph: Range, targetTokens: number): Range[] {
+  const units: Range[] = [];
+  for (const line of matchRanges(rawText, paragraph, LINE_REGEX)) {
+    const trimmed = trimRange(rawText, line);
+    if (!trimmed) continue;
+    if (countTokens(rawText.slice(trimmed.start, trimmed.end)) > targetTokens * 1.5) {
+      units.push(...splitRangeIntoWordWindows(rawText, trimmed, targetTokens));
+    } else {
+      units.push(trimmed);
+    }
+  }
+  return units;
 }
 
 function makeChunk(rawText: string, range: Range): Chunk {
@@ -58,18 +80,19 @@ function makeChunk(rawText: string, range: Range): Chunk {
 
 /**
  * Splits raw text into ~targetTokens-sized passages, preferring paragraph
- * boundaries. A paragraph much longer than the target (e.g. a transcript
- * with no blank-line breaks) falls back to fixed-size word windows.
- * Every returned chunk's `text` is exactly rawText.slice(charStart, charEnd).
+ * boundaries, then line boundaries within a paragraph much longer than the
+ * target, and only then fixed-size word windows. Chunks never start or end
+ * with whitespace, and every returned chunk's `text` is exactly
+ * rawText.slice(charStart, charEnd).
  */
 export function chunkText(rawText: string, targetTokens = 500): Chunk[] {
-  const paragraphs = extractParagraphs(rawText);
-
   const units: Range[] = [];
-  for (const paragraph of paragraphs) {
+  for (const match of matchRanges(rawText, { start: 0, end: rawText.length }, PARAGRAPH_REGEX)) {
+    const paragraph = trimRange(rawText, match);
+    if (!paragraph) continue;
     const tokenCount = countTokens(rawText.slice(paragraph.start, paragraph.end));
     if (tokenCount > targetTokens * 1.5) {
-      units.push(...splitRangeIntoWordWindows(rawText, paragraph, targetTokens));
+      units.push(...splitOversizedParagraph(rawText, paragraph, targetTokens));
     } else {
       units.push(paragraph);
     }

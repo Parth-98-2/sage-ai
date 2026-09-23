@@ -103,7 +103,7 @@ describe("GET /sources/:id/documents", () => {
   it("reflects multiple documents when the same source is re-ingested", async () => {
     const first = await seedFoundersEpisode();
     await ingestText({
-      rawText: sampleText,
+      rawText: `${sampleText}\n\ncorrected`,
       suggestedTitle: "Founders #234 — Enzo Ferrari",
       sourceType: "podcast",
       personName: "David Senra",
