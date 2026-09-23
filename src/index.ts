@@ -1,14 +1,11 @@
-import express, { Request, Response } from "express";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const app = express();
-const port = process.env.PORT || 3000;
+import { createApp } from "./app";
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
+const app = createApp();
+const port = process.env.PORT || 3000;
 
 app.listen(port, () => {
   console.log(`Sage backend listening on port ${port}`);
