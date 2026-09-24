@@ -14,6 +14,7 @@ export interface RawAnswerParams {
   question?: unknown;
   personId?: unknown;
   sourceId?: unknown;
+  sourceIds?: unknown;
   limit?: unknown;
 }
 

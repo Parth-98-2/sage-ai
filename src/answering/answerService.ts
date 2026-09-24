@@ -81,6 +81,7 @@ export async function answerQuestion(raw: RawAnswerParams): Promise<AnswerRespon
     limit: String(limit),
     personId: raw.personId,
     sourceId: raw.sourceId,
+    sourceIds: raw.sourceIds,
     mode: ANSWER_RETRIEVAL_MODE,
   });
 

@@ -282,6 +282,40 @@ describe("POST /answer retrieval", () => {
     expect(llm.requests[0].prompt).not.toContain("Napoleon");
   });
 
+  it("restricts retrieval to the sources listed in sourceIds", async () => {
+    const { bloomberg, napoleon } = await seedCorpus();
+    llm = citing("five-year plan", "Plans.");
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "Bloomberg plans Napoleon fired", sourceIds: [bloomberg.source.id, napoleon.source.id] });
+
+    expect(res.status).toBe(200);
+    const used = new Set(res.body.retrieval.passagesUsed.map((p: { source_id: string }) => p.source_id));
+    expect(used).toEqual(new Set([bloomberg.source.id, napoleon.source.id]));
+    expect(llm.requests[0].prompt).not.toContain(FIRED);
+  });
+
+  it("accepts sourceIds as a comma-separated string", async () => {
+    const { bloomberg, napoleon } = await seedCorpus();
+    llm = citing("five-year plan", "Plans.");
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "Bloomberg plans Napoleon fired", sourceIds: `${bloomberg.source.id}, ${napoleon.source.id}` });
+
+    expect(res.status).toBe(200);
+    expect(res.body.retrieval.passagesUsed).toHaveLength(2);
+    expect(llm.requests[0].prompt).not.toContain(FIRED);
+  });
+
+  it.each(["lexical", "semantic", "hybrid"] as const)("filters %s retrieval by sourceIds", async (mode) => {
+    const { bloomberg, salomon } = await seedCorpus();
+
+    const { results } = await searchPassages({ q: "Bloomberg", mode, sourceIds: [bloomberg.source.id, salomon.source.id] });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((r) => r.source.id === bloomberg.source.id || r.source.id === salomon.source.id)).toBe(true);
+  });
+
   it("sends full passage text to the model, not the highlighted search snippet", async () => {
     const longText = `${Array.from({ length: 80 }, (_, i) => `filler${i}`).join(" ")} Bloomberg rejected the five-year plan outright.`;
     await ingestEpisode(longText, "long-episode");
@@ -357,6 +391,15 @@ describe("POST /answer validation and configuration", () => {
     [{ question: "q", limit: 2.5 }, /limit must be an integer/],
     [{ question: "q", personId: "not-a-uuid" }, /personId must be a valid UUID/],
     [{ question: "q", sourceId: 7 }, /sourceId must be a valid UUID/],
+    [{ question: "q", sourceIds: [] }, /sourceIds must be a non-empty list of valid UUIDs/],
+    [{ question: "q", sourceIds: "" }, /sourceIds must be a non-empty list of valid UUIDs/],
+    [{ question: "q", sourceIds: ["not-a-uuid"] }, /sourceIds must be a non-empty list of valid UUIDs/],
+    [{ question: "q", sourceIds: [7] }, /sourceIds must be a non-empty list of valid UUIDs/],
+    [{ question: "q", sourceIds: 7 }, /sourceIds must be a non-empty list of valid UUIDs/],
+    [
+      { question: "q", sourceId: "00000000-0000-4000-8000-000000000000", sourceIds: ["00000000-0000-4000-8000-000000000000"] },
+      /either sourceId or sourceIds, not both/,
+    ],
   ])("rejects %j", async (body, message) => {
     const res = await answer(body);
     expect(res.status).toBe(400);

@@ -24,7 +24,7 @@ WITH ranked AS (
   WHERE e.model = $2
     AND e.dimensions = cardinality($1::real[])
     AND d.status = 'ready'
-    AND ($4::uuid IS NULL OR p.source_id = $4::uuid)
+    AND ($4::uuid[] IS NULL OR p.source_id = ANY($4::uuid[]))
     AND ($3::uuid IS NULL OR EXISTS (
           SELECT 1 FROM source_people sp
           WHERE sp.source_id = p.source_id AND sp.person_id = $3::uuid
@@ -81,7 +81,7 @@ export const searchPassagesSemantic: Retriever = async (params) => {
     queryEmbedding,
     embedder.modelId,
     params.personId,
-    params.sourceId,
+    params.sourceIds,
     params.limit,
   ]);
   return result.rows.map((row) => ({ ...toSearchResult(row), snippet: leadingWords(row.passage_text) }));

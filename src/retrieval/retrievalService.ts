@@ -50,6 +50,25 @@ function validateOptionalUuid(value: unknown, name: string): string | null {
   return value;
 }
 
+/**
+ * The source filter, from either a single sourceId or a sourceIds list
+ * (comma-separated, as in a query string, or an array, as in a JSON body).
+ */
+function validateSourceIds(sourceId: unknown, sourceIds: unknown): string[] | null {
+  if (sourceIds === undefined) {
+    const single = validateOptionalUuid(sourceId, "sourceId");
+    return single === null ? null : [single];
+  }
+  if (sourceId !== undefined) {
+    throw new ValidationError("use either sourceId or sourceIds, not both");
+  }
+  const ids = typeof sourceIds === "string" ? sourceIds.split(",").map((id) => id.trim()) : sourceIds;
+  if (!Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === "string" && isUuid(id))) {
+    throw new ValidationError("sourceIds must be a non-empty list of valid UUIDs");
+  }
+  return ids;
+}
+
 function validateMode(mode: unknown): SearchMode {
   if (mode === undefined) return DEFAULT_SEARCH_MODE;
   if (typeof mode !== "string" || !(SEARCH_MODES as readonly string[]).includes(mode)) {
@@ -63,7 +82,7 @@ function validate(raw: RawSearchParams): SearchParams {
     q: validateQuery(raw.q),
     limit: validateLimit(raw.limit),
     personId: validateOptionalUuid(raw.personId, "personId"),
-    sourceId: validateOptionalUuid(raw.sourceId, "sourceId"),
+    sourceIds: validateSourceIds(raw.sourceId, raw.sourceIds),
     mode: validateMode(raw.mode),
   };
 }

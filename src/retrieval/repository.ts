@@ -55,7 +55,7 @@ ranked AS (
   JOIN documents d ON d.id = p.document_id
   WHERE p.search_vector @@ query.tsq
     AND d.status = 'ready'
-    AND ($3::uuid IS NULL OR p.source_id = $3::uuid)
+    AND ($3::uuid[] IS NULL OR p.source_id = ANY($3::uuid[]))
     AND ($2::uuid IS NULL OR EXISTS (
           SELECT 1 FROM source_people sp
           WHERE sp.source_id = p.source_id AND sp.person_id = $2::uuid
@@ -133,7 +133,7 @@ export const searchPassagesFullText: Retriever = async (params) => {
   const result = await pool.query<SearchRow>(SEARCH_SQL, [
     params.q,
     params.personId,
-    params.sourceId,
+    params.sourceIds,
     params.limit,
   ]);
   return result.rows.map(toSearchResult);

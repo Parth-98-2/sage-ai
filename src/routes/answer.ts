@@ -15,8 +15,8 @@ router.post("/", async (req, res) => {
     return;
   }
   try {
-    const { question, personId, sourceId, limit } = body as Record<string, unknown>;
-    res.json(await answerQuestion({ question, personId, sourceId, limit }));
+    const { question, personId, sourceId, sourceIds, limit } = body as Record<string, unknown>;
+    res.json(await answerQuestion({ question, personId, sourceId, sourceIds, limit }));
   } catch (err) {
     if (err instanceof ValidationError) {
       res.status(400).json({ error: err.message });

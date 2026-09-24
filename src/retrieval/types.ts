@@ -14,6 +14,8 @@ export interface RawSearchParams {
   limit?: unknown;
   personId?: unknown;
   sourceId?: unknown;
+  /** Several sources: a comma-separated string or an array of UUIDs. Exclusive with sourceId. */
+  sourceIds?: unknown;
   mode?: unknown;
 }
 
@@ -21,7 +23,8 @@ export interface SearchParams {
   q: string;
   limit: number;
   personId: string | null;
-  sourceId: string | null;
+  /** Restricts results to these sources (from sourceId or sourceIds); null means every source. */
+  sourceIds: string[] | null;
   mode: SearchMode;
 }
 
