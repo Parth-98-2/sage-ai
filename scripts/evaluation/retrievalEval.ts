@@ -1,4 +1,4 @@
-import type { SearchResponse, SearchResult } from "../../src/retrieval/types";
+import type { SearchMode, SearchResponse, SearchResult } from "../../src/retrieval/types";
 
 /**
  * Retrieval evaluation helpers. This module only parses the human-written
@@ -35,6 +35,10 @@ export interface ReportMetadata {
   baseUrl: string;
   evalFile: string;
   commit: string | null;
+  /** Set for comparison runs; omitted for the original lexical-only report. */
+  mode?: SearchMode;
+  /** Results requested per question, when more are requested than shown. */
+  requestLimit?: number;
 }
 
 const REQUIRED_FIELDS = ["Expected source", "Expected passage/concept"];
@@ -104,12 +108,16 @@ export function parseEvalFile(markdown: string): EvalQuestion[] {
   return questions;
 }
 
-/** Calls the running Sage server's GET /search; no retrieval logic lives here. */
-export function createHttpSearchClient(baseUrl: string): SearchFn {
+/**
+ * Calls the running Sage server's GET /search; no retrieval logic lives here.
+ * Without `mode` the request is exactly the original lexical request.
+ */
+export function createHttpSearchClient(baseUrl: string, mode?: SearchMode): SearchFn {
   return async (q, limit) => {
     const url = new URL("/search", baseUrl);
     url.searchParams.set("q", q);
     url.searchParams.set("limit", String(limit));
+    if (mode) url.searchParams.set("mode", mode);
 
     const response = await fetch(url);
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -143,7 +151,7 @@ export async function runEvaluation(
 const EXCERPT_CHARS = 700;
 
 /** Escapes text so corpus content cannot inject HTML or Markdown structure. */
-function escapeMarkdown(text: string): string {
+export function escapeMarkdown(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -267,7 +275,10 @@ export function renderMarkdownReport(runs: QuestionRun[], metadata: ReportMetada
     "",
     `- Generated: ${metadata.generatedAt}`,
     `- Commit: ${metadata.commit ?? "unknown"}`,
-    `- Endpoint: \`GET ${metadata.baseUrl}/search?q=…&limit=${EVAL_RESULT_LIMIT}\``,
+    `- Endpoint: \`GET ${metadata.baseUrl}/search?q=…&limit=${metadata.requestLimit ?? EVAL_RESULT_LIMIT}${
+      metadata.mode ? `&mode=${metadata.mode}` : ""
+    }\``,
+    ...(metadata.mode ? [`- Mode: ${metadata.mode} (top ${EVAL_RESULT_LIMIT} shown per question)`] : []),
     `- Evaluation file: \`${metadata.evalFile}\``,
     `- Questions: ${runs.length}`,
     "",

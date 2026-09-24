@@ -4,12 +4,17 @@ export const DEFAULT_SEARCH_LIMIT = 10;
 export const MAX_SEARCH_LIMIT = 50;
 export const MAX_QUERY_LENGTH = 500;
 
+export const SEARCH_MODES = ["lexical", "semantic", "hybrid"] as const;
+export type SearchMode = (typeof SEARCH_MODES)[number];
+export const DEFAULT_SEARCH_MODE: SearchMode = "lexical";
+
 /** Unvalidated input, as received from the query string. */
 export interface RawSearchParams {
   q?: unknown;
   limit?: unknown;
   personId?: unknown;
   sourceId?: unknown;
+  mode?: unknown;
 }
 
 export interface SearchParams {
@@ -17,6 +22,7 @@ export interface SearchParams {
   limit: number;
   personId: string | null;
   sourceId: string | null;
+  mode: SearchMode;
 }
 
 export interface SearchResultPerson {
@@ -40,8 +46,8 @@ export interface SearchResponse {
 }
 
 /**
- * A retrieval strategy returns passages ranked best-first. Full-text search
- * is the only implementation in V1; a semantic retriever can later satisfy
- * the same contract and be fused with it.
+ * A retrieval strategy returns passages ranked best-first. Lexical
+ * (full-text), semantic (embedding) and hybrid (fused) retrieval all satisfy
+ * this contract; `score` is only comparable within one strategy.
  */
 export type Retriever = (params: SearchParams) => Promise<SearchResult[]>;

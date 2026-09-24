@@ -13,8 +13,11 @@ import {
 } from "../scripts/evaluation/retrievalEval";
 import { createApp } from "../src/app";
 import { pool } from "../src/db/pool";
+import { embedMissingPassages } from "../src/embeddings/backfill";
+import { setEmbedder } from "../src/embeddings/embedder";
 import { ingestText } from "../src/ingestion/ingestionService";
 import type { SearchResult } from "../src/retrieval/types";
+import { createFakeEmbedder } from "./helpers/fakeEmbedder";
 
 const FIXTURE = [
   "# Eval Set",
@@ -268,7 +271,10 @@ describe("createHttpSearchClient against the real app", () => {
   let server: Server;
   let baseUrl: string;
 
+  const embedder = createFakeEmbedder();
+
   beforeAll(async () => {
+    setEmbedder(embedder);
     server = createApp().listen(0);
     await new Promise<void>((resolve) => server.once("listening", () => resolve()));
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -279,6 +285,7 @@ describe("createHttpSearchClient against the real app", () => {
   });
 
   afterAll(async () => {
+    setEmbedder(null);
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await pool.end();
   });
@@ -297,6 +304,32 @@ describe("createHttpSearchClient against the real app", () => {
     expect(response.results).toHaveLength(1);
     expect(response.results[0].source.title).toBe("founders-433-michael-bloomberg");
     expect(response.results[0].passage.ordinal).toBe(0);
+  });
+
+  it("sends mode only when given, so the default client is the original lexical request", async () => {
+    await ingestText({
+      rawText: "Don't devise a five-year plan.",
+      suggestedTitle: "A",
+      sourceType: "podcast",
+      personName: "Michael Bloomberg",
+      ingestionMethod: "text_upload",
+    });
+    await ingestText({
+      rawText: "Gardens need patient tending.",
+      suggestedTitle: "B",
+      sourceType: "podcast",
+      personName: "Michael Bloomberg",
+      ingestionMethod: "text_upload",
+    });
+    await embedMissingPassages(embedder);
+
+    const lexical = await createHttpSearchClient(baseUrl)("five-year plan", 10);
+    const explicitLexical = await createHttpSearchClient(baseUrl, "lexical")("five-year plan", 10);
+    const semantic = await createHttpSearchClient(baseUrl, "semantic")("five-year plan", 10);
+
+    expect(lexical).toEqual(explicitLexical);
+    expect(lexical.results).toHaveLength(1);
+    expect(semantic.results).toHaveLength(2);
   });
 
   it("surfaces the endpoint's error message on a non-2xx response", async () => {

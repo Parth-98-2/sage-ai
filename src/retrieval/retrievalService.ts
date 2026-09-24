@@ -1,14 +1,26 @@
 import { ValidationError } from "../ingestion/types";
 import { isUuid } from "../utils/uuid";
+import { searchPassagesHybrid } from "./hybrid";
 import { searchPassagesFullText } from "./repository";
+import { searchPassagesSemantic } from "./semanticRepository";
 import {
   DEFAULT_SEARCH_LIMIT,
+  DEFAULT_SEARCH_MODE,
   MAX_QUERY_LENGTH,
   MAX_SEARCH_LIMIT,
+  SEARCH_MODES,
   type RawSearchParams,
+  type Retriever,
+  type SearchMode,
   type SearchParams,
   type SearchResponse,
 } from "./types";
+
+const RETRIEVERS: Record<SearchMode, Retriever> = {
+  lexical: searchPassagesFullText,
+  semantic: searchPassagesSemantic,
+  hybrid: searchPassagesHybrid,
+};
 
 function validateQuery(q: unknown): string {
   if (typeof q !== "string" || q.trim().length === 0) {
@@ -38,17 +50,26 @@ function validateOptionalUuid(value: unknown, name: string): string | null {
   return value;
 }
 
+function validateMode(mode: unknown): SearchMode {
+  if (mode === undefined) return DEFAULT_SEARCH_MODE;
+  if (typeof mode !== "string" || !(SEARCH_MODES as readonly string[]).includes(mode)) {
+    throw new ValidationError(`mode must be one of: ${SEARCH_MODES.join(", ")}`);
+  }
+  return mode as SearchMode;
+}
+
 function validate(raw: RawSearchParams): SearchParams {
   return {
     q: validateQuery(raw.q),
     limit: validateLimit(raw.limit),
     personId: validateOptionalUuid(raw.personId, "personId"),
     sourceId: validateOptionalUuid(raw.sourceId, "sourceId"),
+    mode: validateMode(raw.mode),
   };
 }
 
 export async function searchPassages(raw: RawSearchParams): Promise<SearchResponse> {
   const params = validate(raw);
-  const results = await searchPassagesFullText(params);
+  const results = await RETRIEVERS[params.mode](params);
   return { query: params.q, results };
 }

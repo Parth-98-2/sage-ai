@@ -71,3 +71,16 @@ ALTER TABLE passages
   GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
 
 CREATE INDEX IF NOT EXISTS idx_passages_search_vector ON passages USING GIN (search_vector);
+
+-- Retrieval experiment (V2): one embedding per passage per model. Vectors are
+-- stored as plain REAL[] and compared exactly in SQL (no pgvector).
+CREATE TABLE IF NOT EXISTS passage_embeddings (
+  passage_id UUID NOT NULL REFERENCES passages(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  dimensions INT NOT NULL,
+  embedding REAL[] NOT NULL,
+  text_sha256 TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (passage_id, model),
+  CHECK (cardinality(embedding) = dimensions)
+);

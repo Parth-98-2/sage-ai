@@ -1,0 +1,535 @@
+{
+  "status": "DRAFT - pending human approval; frozen before any semantic or hybrid evaluation",
+  "evalFile": "corpus/retrieval-eval.md.txt",
+  "evalFileSha256": "86282ce2fa0797c7445d867a02b6e7d8605887d153dd87c204cf63604f5fe877",
+  "passageIdentity": "sourceTitle + passage ordinal; textSha256 is the SHA-256 of the passage text (UTF-8) and must match at evaluation time",
+  "grades": {
+    "1": "secondary relevant evidence: partially addresses it, or addresses it from a non-reference source",
+    "2": "primary evidence: directly states the expected passage/concept",
+    "unjudged": "unknown relevance - NOT irrelevant; surfaced for human judgment"
+  },
+  "judgments": [
+    {
+      "question": 1,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 2,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "Don't devise a five-year plan or a great leap forward.",
+      "rationale": "States the five-year-plan view directly, with tactical next-step planning."
+    },
+    {
+      "question": 1,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 1,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Lead-in to the same argument: no long-range life scheme; not the five-year-plan line itself."
+    },
+    {
+      "question": 2,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 0,
+      "grade": 2,
+      "textSha256": "044d05bf726f40823339559a6469cfcd555178d7ef7d660d283e91a86b85649c",
+      "evidence": "I was terminated from the only full-time job I'd ever known",
+      "rationale": "The firing from Solomon Brothers and his reaction (never looking over his shoulder)."
+    },
+    {
+      "question": 3,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 11,
+      "grade": 2,
+      "textSha256": "622418f3251c5811d673961f389c20339286a8a722784f35f9813a30f3703474",
+      "evidence": "We acted from day one. Others plan to plan for months.",
+      "rationale": "Direct statement of acting instead of planning for months."
+    },
+    {
+      "question": 3,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 1,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Same principle stated generally, without the months-of-planning contrast."
+    },
+    {
+      "question": 3,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 8,
+      "grade": 1,
+      "textSha256": "a6195239caea391f63e65094dd8cf7027f702dd6b18431d0f3b8afc212ae34ec",
+      "evidence": "stop overanalyzing, stop planning too much. Just start.",
+      "rationale": "Same principle applied to starting a venture."
+    },
+    {
+      "question": 3,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 1,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "Take lots of chances and make lots of individual spur-of-the-moment decisions.",
+      "rationale": "Favours action and quick decisions over long plans."
+    },
+    {
+      "question": 4,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 2,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "you should be careful, even timid, when planning, but then you're bold and relentless when acting.",
+      "rationale": "Timid in planning, bold and relentless in execution."
+    },
+    {
+      "question": 4,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 24,
+      "grade": 2,
+      "textSha256": "f3b3e3223ef797c75d7962e593b58d7688c35f23d045cd983c7a77b7853cf795",
+      "evidence": "Number two, planned pessimistically then execute boldly.",
+      "rationale": "Plan pessimistically, execute boldly."
+    },
+    {
+      "question": 4,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 1,
+      "grade": 1,
+      "textSha256": "ae78a61ed65155849779112052ba0fe4c5acfecf9d125a29fd1ee61fc971a35e",
+      "evidence": "Once an action has begun, it must be followed through with the utmost exertion of the will.",
+      "rationale": "Relentless follow-through once acting; boldness not named."
+    },
+    {
+      "question": 4,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 19,
+      "grade": 1,
+      "textSha256": "3092fbe801a52158c5827619709f9d829949c4cc1bde255873977bfeee69b385",
+      "evidence": "And then once you decide, that is the path you are going to take.",
+      "rationale": "Commit once decided; hesitation is fatal; boldness not named."
+    },
+    {
+      "question": 5,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 9,
+      "grade": 2,
+      "textSha256": "7ec3974df996bee443c5ab08b7c9b141bdefc8a0712d3f96a456305d67af8482",
+      "evidence": "Most of the time, I had no definitive plans, but only projects.",
+      "rationale": "Napoleon's own statement about definitive plans."
+    },
+    {
+      "question": 5,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 25,
+      "grade": 1,
+      "textSha256": "1c4055cf674d5daaff1b5a1e787448f7c2cbabb009d61afc697d3249d2ed78d7",
+      "evidence": "A project preserves the objective while allowing the route to change.",
+      "rationale": "Host's summary of the projects-over-rigid-plans principle, not Napoleon's words."
+    },
+    {
+      "question": 5,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 1,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "asked me where I was headed, I always answered that I had not the least idea.",
+      "rationale": "Related admission that he had no fixed plan for where he was headed."
+    },
+    {
+      "question": 6,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 2,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "make tactical plans for the next few steps. Then, based on what actually occurs, look one more move ahead and adjust the plan.",
+      "rationale": "Incremental advances, tactical steps, adjust to what happens."
+    },
+    {
+      "question": 6,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 1,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Rejects a comprehensive long-term scheme (framed around career/life)."
+    },
+    {
+      "question": 6,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 11,
+      "grade": 1,
+      "textSha256": "622418f3251c5811d673961f389c20339286a8a722784f35f9813a30f3703474",
+      "evidence": "We acted from day one. Others plan to plan for months.",
+      "rationale": "Broke the problem into pieces and acted immediately."
+    },
+    {
+      "question": 6,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 13,
+      "grade": 1,
+      "textSha256": "bd39c49d739a084944afec30409ff633574b8809efb930b09bb7753e4f74ac07",
+      "evidence": "We improvised everything as we went along.",
+      "rationale": "Built the business by improvising and iterating daily."
+    },
+    {
+      "question": 6,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 17,
+      "grade": 1,
+      "textSha256": "60753102b914325987aaa90a5c8b56e66521b7d25429aa59db3251e6d89c5b8d",
+      "evidence": "he doesn't know how he's going to get there, and he's willing to be flexible every day.",
+      "rationale": "Basic direction without a mapped route."
+    },
+    {
+      "question": 7,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 25,
+      "grade": 2,
+      "textSha256": "1c4055cf674d5daaff1b5a1e787448f7c2cbabb009d61afc697d3249d2ed78d7",
+      "evidence": "A project preserves the objective while allowing the route to change.",
+      "rationale": "Preserve the objective, change the route."
+    },
+    {
+      "question": 7,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 9,
+      "grade": 2,
+      "textSha256": "7ec3974df996bee443c5ab08b7c9b141bdefc8a0712d3f96a456305d67af8482",
+      "evidence": "instead of obstinately seeking to control circumstances, I obeyed them.",
+      "rationale": "Adapts to circumstances instead of stubbornly following the original path."
+    },
+    {
+      "question": 7,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 1,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "thus, I never was truly my own master, but I was always ruled by my circumstances.",
+      "rationale": "Ruled by circumstances; objective-preservation not stated."
+    },
+    {
+      "question": 8,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 8,
+      "grade": 2,
+      "textSha256": "a6195239caea391f63e65094dd8cf7027f702dd6b18431d0f3b8afc212ae34ec",
+      "evidence": "stop overanalyzing, stop planning too much. Just start.",
+      "rationale": "Stop overanalyzing, start, practical vision around a customer need."
+    },
+    {
+      "question": 8,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 11,
+      "grade": 1,
+      "textSha256": "622418f3251c5811d673961f389c20339286a8a722784f35f9813a30f3703474",
+      "evidence": "We acted from day one. Others plan to plan for months.",
+      "rationale": "Began immediately rather than planning first."
+    },
+    {
+      "question": 8,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 1,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "General principle: planning must not delay doing."
+    },
+    {
+      "question": 8,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 10,
+      "grade": 1,
+      "textSha256": "3a5bcbef2860bd497272aed9e577bde357d3adada05109adfe2112a6ce232b49",
+      "evidence": "I love that he sold to Merrill Lynch before he had a product.",
+      "rationale": "Concrete example of beginning before the product was figured out."
+    },
+    {
+      "question": 8,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 13,
+      "grade": 1,
+      "textSha256": "bd39c49d739a084944afec30409ff633574b8809efb930b09bb7753e4f74ac07",
+      "evidence": "We improvised everything as we went along.",
+      "rationale": "Learning through action rather than upfront design."
+    },
+    {
+      "question": 9,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 24,
+      "grade": 2,
+      "textSha256": "f3b3e3223ef797c75d7962e593b58d7688c35f23d045cd983c7a77b7853cf795",
+      "evidence": "Before deciding, doubt, investigate, and exaggerate the downside.",
+      "rationale": "Before deciding: doubt and investigate; after: eliminate hesitation."
+    },
+    {
+      "question": 9,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 2,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "I purposely exaggerate all the dangers and all the calamities",
+      "rationale": "Timid, danger-exaggerating planning; once decided, everything else is forgotten."
+    },
+    {
+      "question": 9,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 1,
+      "grade": 2,
+      "textSha256": "ae78a61ed65155849779112052ba0fe4c5acfecf9d125a29fd1ee61fc971a35e",
+      "evidence": "take a lot of time planning what you're going to do, be excessively thorough, but once you're, you've major decision, no hesitation.",
+      "rationale": "Thorough planning, then no hesitation once decided."
+    },
+    {
+      "question": 9,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 19,
+      "grade": 2,
+      "textSha256": "3092fbe801a52158c5827619709f9d829949c4cc1bde255873977bfeee69b385",
+      "evidence": "And then once you decide, that is the path you are going to take.",
+      "rationale": "Research and prepare first; once decided, commit; hesitation is fatal."
+    },
+    {
+      "question": 10,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 17,
+      "grade": 2,
+      "textSha256": "60753102b914325987aaa90a5c8b56e66521b7d25429aa59db3251e6d89c5b8d",
+      "evidence": "he has a basic idea of where he's going to go, but he doesn't know how he's going to get there, and he's willing to be flexible every day.",
+      "rationale": "Basic end goal, flexible route."
+    },
+    {
+      "question": 10,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 2,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Don't let long-range planning interfere with action."
+    },
+    {
+      "question": 10,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 1,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "I stay flexible.",
+      "rationale": "Flexibility and short tactical plans; destination not addressed."
+    },
+    {
+      "question": 11,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 25,
+      "grade": 2,
+      "textSha256": "1c4055cf674d5daaff1b5a1e787448f7c2cbabb009d61afc697d3249d2ed78d7",
+      "evidence": "A project preserves the objective while allowing the route to change.",
+      "rationale": "Firm objective, changeable route."
+    },
+    {
+      "question": 11,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 9,
+      "grade": 2,
+      "textSha256": "7ec3974df996bee443c5ab08b7c9b141bdefc8a0712d3f96a456305d67af8482",
+      "evidence": "Most of the time, I had no definitive plans, but only projects.",
+      "rationale": "Projects not predetermined plans; circumstances force changes."
+    },
+    {
+      "question": 11,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 2,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "asked me where I was headed, I always answered that I had not the least idea.",
+      "rationale": "Could not predict the path; ruled by circumstances rather than bending events to a system."
+    },
+    {
+      "question": 11,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 17,
+      "grade": 1,
+      "textSha256": "60753102b914325987aaa90a5c8b56e66521b7d25429aa59db3251e6d89c5b8d",
+      "evidence": "he has a basic idea of where he's going to go, but he doesn't know how he's going to get there, and he's willing to be flexible every day.",
+      "rationale": "Same idea from the other (non-reference) source."
+    },
+    {
+      "question": 11,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 1,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "make tactical plans for the next few steps. Then, based on what actually occurs, look one more move ahead and adjust the plan.",
+      "rationale": "Path handled step by step (non-reference source)."
+    },
+    {
+      "question": 12,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 2,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "make tactical plans for the next few steps. Then, based on what actually occurs, look one more move ahead and adjust the plan.",
+      "rationale": "Reality decides; small earned steps; adjust to what happens."
+    },
+    {
+      "question": 12,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 10,
+      "grade": 1,
+      "textSha256": "3a5bcbef2860bd497272aed9e577bde357d3adada05109adfe2112a6ce232b49",
+      "evidence": "We were adjusting to major earthquakes when some new software bug forced us to start over.",
+      "rationale": "Reality repeatedly overturning plans and the team adjusting."
+    },
+    {
+      "question": 12,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 13,
+      "grade": 1,
+      "textSha256": "bd39c49d739a084944afec30409ff633574b8809efb930b09bb7753e4f74ac07",
+      "evidence": "We improvised everything as we went along.",
+      "rationale": "Iterating daily instead of fixing a design upfront."
+    },
+    {
+      "question": 12,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 13,
+      "grade": 1,
+      "textSha256": "2c7c8441f88575aec95ce4c70edc3252dd585f2dff7d68ae8fe4e6d97517dab9",
+      "evidence": "He's constantly criticizing people that never let their ideas get tested by reality.",
+      "rationale": "Napoleon's disdain for ideas never tested by reality."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 8,
+      "grade": 2,
+      "textSha256": "a6195239caea391f63e65094dd8cf7027f702dd6b18431d0f3b8afc212ae34ec",
+      "evidence": "stop overanalyzing, stop planning too much. Just start.",
+      "rationale": "Overanalyzing and excessive planning prevent starting."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 2,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Planning must not become an obstacle to doing."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 1,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "Planning has its place.",
+      "rationale": "Planning has a place, but you only learn what is possible when you get there."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 24,
+      "grade": 1,
+      "textSha256": "f3b3e3223ef797c75d7962e593b58d7688c35f23d045cd983c7a77b7853cf795",
+      "evidence": "Speculation mattered only if it",
+      "rationale": "Thought matters only if it clarifies the next action; eliminate hesitation after deciding."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 1,
+      "grade": 1,
+      "textSha256": "ae78a61ed65155849779112052ba0fe4c5acfecf9d125a29fd1ee61fc971a35e",
+      "evidence": "Once an action has begun, it must be followed through with the utmost exertion of the will.",
+      "rationale": "No hesitation once decided."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 1,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "Once I have made up my mind, everything is forgotten",
+      "rationale": "Once decided, stop deliberating."
+    },
+    {
+      "question": 13,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 19,
+      "grade": 1,
+      "textSha256": "3092fbe801a52158c5827619709f9d829949c4cc1bde255873977bfeee69b385",
+      "evidence": "And then once you decide, that is the path you are going to take.",
+      "rationale": "Hesitation is fatal after deciding."
+    },
+    {
+      "question": 14,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 25,
+      "grade": 2,
+      "textSha256": "1c4055cf674d5daaff1b5a1e787448f7c2cbabb009d61afc697d3249d2ed78d7",
+      "evidence": "Napoleon combined firmness of purpose with flexibility of means.",
+      "rationale": "Firm purpose, flexible means; unite long-term ambition with immediate usefulness."
+    },
+    {
+      "question": 14,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 21,
+      "grade": 2,
+      "textSha256": "2448c9f4cd50560ace119405bb90fe57bc4de6e6e2c4b72bc5aac39c40a9fe30",
+      "evidence": "thus, I never was truly my own master, but I was always ruled by my circumstances.",
+      "rationale": "Unlimited ambition and being ruled by circumstances in the same passage."
+    },
+    {
+      "question": 14,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 9,
+      "grade": 1,
+      "textSha256": "7ec3974df996bee443c5ab08b7c9b141bdefc8a0712d3f96a456305d67af8482",
+      "evidence": "instead of obstinately seeking to control circumstances, I obeyed them.",
+      "rationale": "Accepting circumstances; ambition not addressed."
+    },
+    {
+      "question": 14,
+      "sourceTitle": "founders-432-napoleon",
+      "ordinal": 26,
+      "grade": 1,
+      "textSha256": "f908d3642bad8aeb455a8a966cc33b148e531ea7f7721d6a8f10f6e435bd460b",
+      "evidence": "He could adapt brilliantly to circumstances and yet become imprisoned by his own image of invincibility.",
+      "rationale": "Adapting to circumstances; ambition as engine and disease."
+    },
+    {
+      "question": 15,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 7,
+      "grade": 2,
+      "textSha256": "c397efd5eb5c68ff63cf4d870058f68065ebbe23ba29163dc7c304f8cf18b98e",
+      "evidence": "make tactical plans for the next few steps. Then, based on what actually occurs, look one more move ahead and adjust the plan.",
+      "rationale": "Small steps, look one move ahead, adapt; no five-year plan."
+    },
+    {
+      "question": 15,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 11,
+      "grade": 1,
+      "textSha256": "622418f3251c5811d673961f389c20339286a8a722784f35f9813a30f3703474",
+      "evidence": "We acted from day one. Others plan to plan for months.",
+      "rationale": "Others planned for months while Bloomberg acted."
+    },
+    {
+      "question": 15,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 6,
+      "grade": 1,
+      "textSha256": "52f15c937f84486341d0593bca606556c222c6bf88da72401c3c8c98b7589b1f",
+      "evidence": "Both at business and at home, I've never let planning get in the way of doing.",
+      "rationale": "Rejects a comprehensive long-range scheme."
+    },
+    {
+      "question": 15,
+      "sourceTitle": "founders-433-michael-bloomberg",
+      "ordinal": 13,
+      "grade": 1,
+      "textSha256": "bd39c49d739a084944afec30409ff633574b8809efb930b09bb7753e4f74ac07",
+      "evidence": "We improvised everything as we went along.",
+      "rationale": "Step-by-step iteration in practice."
+    }
+  ]
+}

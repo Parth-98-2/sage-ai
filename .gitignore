@@ -5,3 +5,7 @@ dist/
 npm-debug.log*
 .DS_Store
 coverage/
+
+# Local embedding model cache and retrieval evaluation output
+.cache/
+eval-output/

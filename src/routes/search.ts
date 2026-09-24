@@ -11,6 +11,7 @@ router.get("/", async (req, res) => {
       limit: req.query.limit,
       personId: req.query.personId,
       sourceId: req.query.sourceId,
+      mode: req.query.mode,
     });
     res.json(result);
   } catch (err) {

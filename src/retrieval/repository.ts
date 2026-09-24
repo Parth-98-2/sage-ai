@@ -1,7 +1,7 @@
 import { pool } from "../db/pool";
 import type { Retriever, SearchResult, SearchResultPerson } from "./types";
 
-interface SearchRow {
+export interface SearchRow {
   passage_id: string;
   passage_ordinal: number;
   passage_text: string;
@@ -99,7 +99,7 @@ CROSS JOIN LATERAL (
 ORDER BY r.score DESC, r.id ASC
 `;
 
-function toSearchResult(row: SearchRow): SearchResult {
+export function toSearchResult(row: SearchRow): SearchResult {
   return {
     passage: {
       id: row.passage_id,

@@ -250,6 +250,9 @@ describe("GET /search validation", () => {
     ["non-numeric limit", "/search?q=courage&limit=ten"],
     ["invalid personId", "/search?q=courage&personId=not-a-uuid"],
     ["invalid sourceId", "/search?q=courage&sourceId=123"],
+    ["unknown mode", "/search?q=courage&mode=vector"],
+    ["empty mode", "/search?q=courage&mode="],
+    ["repeated mode", "/search?q=courage&mode=lexical&mode=semantic"],
   ])("rejects %s with 400", async (_label, url) => {
     const res = await request(app).get(url);
     expect(res.status).toBe(400);
@@ -260,5 +263,19 @@ describe("GET /search validation", () => {
     const res = await search({ q: "  courage  " });
     expect(res.status).toBe(200);
     expect(res.body.query).toBe("courage");
+  });
+});
+
+describe("GET /search mode", () => {
+  it("defaults to lexical: omitting mode returns exactly the mode=lexical response", async () => {
+    await ingest({ rawText: "Courage is the first of the virtues." });
+    await ingest({ rawText: "Courage, courage and more courage.", suggestedTitle: "Letters", sourceType: "essay" });
+
+    const omitted = await search({ q: "courage" });
+    const explicit = await search({ q: "courage", mode: "lexical" });
+
+    expect(omitted.status).toBe(200);
+    expect(omitted.body.results).toHaveLength(2);
+    expect(explicit.body).toEqual(omitted.body);
   });
 });

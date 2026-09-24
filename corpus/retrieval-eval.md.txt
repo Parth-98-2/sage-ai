@@ -1,0 +1,163 @@
+# Sage Retrieval Evaluation Set
+
+## Purpose
+
+Evaluate whether Sage can retrieve the right source passages for questions that range from direct textual lookup to substantially reworded conceptual questions.
+
+For each question, the expected passage/concept is a retrieval target, not an expected answer.
+
+---
+
+## Category 1 — Direct / Lexical
+
+These should be relatively easy for PostgreSQL full-text search.
+
+### Q1
+
+What did Michael Bloomberg say about making five-year plans?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Tactical plans for the next few steps; adjust based on what happens; don't devise a five-year plan.
+
+### Q2
+
+What did Bloomberg say about getting fired from Solomon Brothers?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Being fired after 15 years; his reaction to it; moving forward rather than looking over his shoulder.
+
+### Q3
+
+What did Bloomberg say about acting instead of spending months planning?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** “Get action”; Bloomberg's company acted from day one while others planned for months.
+
+### Q4
+
+What did Napoleon believe about boldness when actually carrying out a decision?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** Be cautious/timid while planning, but once the decision is made, act boldly and relentlessly.
+
+### Q5
+
+What did Napoleon say about having definitive plans?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** He often had no definitive plans, but rather projects; circumstances forced him to change his mind.
+
+---
+
+## Category 2 — Reworded
+
+These deliberately avoid some of the most obvious words from the relevant passages.
+
+### Q6
+
+How did Bloomberg approach the problem of building a business when the future could not be mapped out in advance?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Make small incremental advances, take tactical steps, observe reality, and adjust rather than constructing a comprehensive long-term scheme.
+
+### Q7
+
+If the situation changes after I have started pursuing an objective, what approach does the Napoleon material suggest?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** Preserve the objective while changing the route; remain flexible in response to circumstances rather than stubbornly following the original path.
+
+### Q8
+
+What does Bloomberg's experience suggest about waiting until a new venture has been completely figured out before beginning?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Stop overanalyzing; start; build a practical vision around a real customer need; learn through action.
+
+### Q9
+
+According to the Napoleon material, how should preparation and execution differ?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** Investigate and exaggerate possible dangers before deciding; after deciding, eliminate hesitation and commit fully.
+
+### Q10
+
+What does the Bloomberg material suggest about setting an ambitious destination without knowing the entire route?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Have a basic end goal but remain flexible about how to reach it; don't let long-range planning interfere with action.
+
+---
+
+## Category 3 — Semantic / Conceptual
+
+These are the important tests. The wording intentionally does not closely mirror the source.
+
+### Q11
+
+I have a large objective, but I cannot predict the sequence of events that will eventually get me there. How should I think about the gap between the destination and the path?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** Pursue projects rather than rigidly predetermined plans; circumstances may force changes; retain the objective while adapting the route.
+
+**Difficulty:** High
+
+### Q12
+
+Suppose I spend six months designing a perfect strategy and then reality immediately invalidates several of its assumptions. What philosophy from these sources speaks most directly to that problem?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Reality determines what is possible; make small earned advances, look one move ahead, and adjust based on what actually happens.
+
+**Difficulty:** High
+
+### Q13
+
+When does thinking become counterproductive rather than useful according to the material?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Overanalyzing and excessive planning can prevent starting; planning has a place, but should not become an obstacle to action.
+
+**Secondary source:** Napoleon
+**Secondary concept:** Once a decision has been made, hesitation is harmful and action should follow decisively.
+
+**Difficulty:** High
+
+### Q14
+
+How can someone combine extreme ambition with the fact that they have very little control over future events?
+
+**Expected source:** Napoleon
+**Expected passage/concept:** Maintain immense ambition while accepting circumstances and adapting to them; flexible means can serve a firm purpose.
+
+**Difficulty:** Very high
+
+### Q15
+
+Imagine two founders. One spends months constructing a detailed model of the next five years. The other chooses a direction, takes a small step, observes the result, and chooses the next step from there. What evidence in the corpus speaks to this difference?
+
+**Expected source:** Bloomberg
+**Expected passage/concept:** Small incremental advances; tactical plans; look one move ahead; adapt to reality; no five-year plan.
+
+**Secondary source:** Bloomberg
+**Secondary concept:** Others planned for months while Bloomberg's company acted from day one.
+
+**Difficulty:** Very high
+
+---
+
+## Evaluation rule
+
+For every question, record:
+
+* Whether the expected passage appears in the top 1 result
+* Whether it appears in the top 5
+* Whether it appears in the top 10
+* The rank of the best relevant passage
+* Whether the result is genuinely relevant or only matches words
+* Any obviously irrelevant high-ranking results
+
+Do not change the retrieval implementation while running this evaluation.
+
+The purpose is to establish a baseline for the current lexical retriever before introducing embeddings or hybrid retrieval.
