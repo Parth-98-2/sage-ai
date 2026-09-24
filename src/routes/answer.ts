@@ -25,7 +25,10 @@ router.post("/", async (req, res) => {
     } else if (err instanceof LanguageModelConfigError) {
       res.status(503).json({ error: err.message });
     } else {
-      res.status(500).json({ error: (err as Error).message });
+      // Unexpected failures (e.g. the database being down) are logged in full: some,
+      // like node's AggregateError for a refused connection, have an empty message.
+      console.error("POST /answer failed:", err);
+      res.status(500).json({ error: (err as Error).message || "internal server error" });
     }
   }
 });

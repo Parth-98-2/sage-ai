@@ -2,8 +2,12 @@ import { LanguageModelConfigError, LanguageModelError } from "./errors";
 import type { LanguageModel, LanguageModelStopReason } from "./languageModel";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
-/** Room for the ~10k-token evidence prompt plus the answer; Ollama's own default is far smaller. */
-export const DEFAULT_OLLAMA_NUM_CTX = 32768;
+/**
+ * Fits the default 10-passage evidence prompt (~7k tokens with qwen2.5) plus a
+ * short answer, and keeps CPU inference fast; Ollama's own default is smaller.
+ * A prompt that does not fit is rejected (see truncate below), not cut.
+ */
+export const DEFAULT_OLLAMA_NUM_CTX = 8192;
 export const DEFAULT_OLLAMA_TIMEOUT_MS = 300_000;
 
 export interface OllamaConfig {

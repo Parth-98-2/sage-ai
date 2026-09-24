@@ -420,6 +420,22 @@ describe("POST /answer validation and configuration", () => {
     expect(text.status).toBe(400);
   });
 
+  it("logs unexpected failures and never returns an empty error message", async () => {
+    // Node reports a refused connection (e.g. Postgres down) as an AggregateError with an empty message.
+    const failure = new AggregateError([new Error("connect ECONNREFUSED 127.0.0.1:5432")], "");
+    searchSpy.mockRejectedValueOnce(failure);
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await answer({ question: "five-year plan" });
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBe("internal server error");
+      expect(logSpy).toHaveBeenCalledWith("POST /answer failed:", failure);
+      expect(llm.requests).toHaveLength(0);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it("never loads the real model under NODE_ENV=test", async () => {
     await seedCorpus();
     setLanguageModel(null);
