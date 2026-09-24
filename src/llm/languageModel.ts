@@ -1,4 +1,4 @@
-import { createAnthropicLanguageModel } from "./anthropicModel";
+import { createLanguageModelFromEnv } from "./provider";
 
 export interface LanguageModelRequest {
   system: string;
@@ -26,9 +26,9 @@ export interface LanguageModel {
 
 let current: LanguageModel | null = null;
 
-/** The process-wide language model; the real one is created lazily on first use. */
+/** The process-wide language model, from the configured provider; created lazily on first use. */
 export function getLanguageModel(): LanguageModel {
-  current ??= createAnthropicLanguageModel();
+  current ??= createLanguageModelFromEnv();
   return current;
 }
 
