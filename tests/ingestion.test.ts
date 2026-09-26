@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../src/db/pool";
-import { ingestText } from "../src/ingestion/ingestionService";
+import { ingestText, ingestTranscript } from "../src/ingestion/ingestionService";
 import { getDocumentWithPassages } from "../src/ingestion/repository";
 import { ValidationError } from "../src/ingestion/types";
 
@@ -189,5 +189,134 @@ describe("ingestText optional field validation", () => {
     const result = await ingestText(baseInput({ publishedAt: "  ", externalUrl: "" }));
     expect(result.source.published_at).toBeNull();
     expect(result.source.external_url).toBeNull();
+  });
+});
+
+describe("ingestTranscript", () => {
+  const TRANSCRIPT = [
+    "Walton opened his first store in Newport, Arkansas. Before we get back into this, I want to tell you about the presenting sponsor of this",
+    "Starting point is 00:09:19",
+    "podcast, Ramp. Ramp helps businesses control costs. That is ramp.com. And so Walton kept visiting other stores to learn.",
+    "Starting point is 00:10:01",
+    "He borrowed ideas shamelessly. That is 999 books down, 1,000 to go. And I'll talk to you again soon. So I have this AI assistant I called Sage.",
+  ].join("\n");
+
+  function transcriptInput(overrides: Partial<Parameters<typeof ingestTranscript>[0]> = {}) {
+    return {
+      rawText: TRANSCRIPT,
+      suggestedTitle: "Founders #999 - Sam Walton",
+      sourceType: "podcast",
+      personName: "David Senra",
+      personRole: "host",
+      additionalPeople: [{ name: "Sam Walton", role: "subject" }],
+      ingestionMethod: "text_upload",
+      originalFilename: "founders-999-sam-walton.txt",
+      mimeType: "text/plain",
+      ...overrides,
+    };
+  }
+
+  it("stores the whole raw transcript, sponsor reads included, as the document", async () => {
+    const result = await ingestTranscript(transcriptInput());
+
+    expect(result.duplicate).toBe(false);
+    expect(result.document.raw_text).toBe(TRANSCRIPT);
+    expect(result.source).toMatchObject({ title: "Founders #999 - Sam Walton", source_type: "podcast" });
+    expect(result.removed.map((range) => range.reason)).toEqual(["sponsor", "post_roll"]);
+  });
+
+  it("stores passages of episode content only, as exact slices with their transcript times", async () => {
+    const result = await ingestTranscript(transcriptInput());
+    const { passages } = (await getDocumentWithPassages(result.document.id))!;
+
+    expect(passages.length).toBeGreaterThan(0);
+    for (const passage of passages) {
+      expect(TRANSCRIPT.slice(passage.char_start, passage.char_end)).toBe(passage.text);
+      expect(passage.text).not.toMatch(/Ramp|ramp\.com|Sage/);
+    }
+    expect(passages.map((passage) => passage.metadata)).toEqual([
+      { start_time: "00:00:00", end_time: "00:09:19" },
+      { start_time: "00:09:19", end_time: null },
+    ]);
+    expect(passages.map((passage) => passage.text).join(" ")).toContain("And so Walton kept visiting other stores to learn.");
+  });
+
+  it("links the host and the episode's subject to the source", async () => {
+    const result = await ingestTranscript(transcriptInput());
+    const { rows } = await pool.query(
+      "SELECT p.name, sp.role FROM source_people sp JOIN people p ON p.id = sp.person_id WHERE sp.source_id = $1 ORDER BY sp.role",
+      [result.source.id]
+    );
+    expect(rows).toEqual([
+      { name: "David Senra", role: "host" },
+      { name: "Sam Walton", role: "subject" },
+    ]);
+  });
+
+  it("creates nothing new when the same transcript is ingested again", async () => {
+    const first = await ingestTranscript(transcriptInput());
+    const second = await ingestTranscript(transcriptInput({ rawText: TRANSCRIPT.replace(/\n/g, "\r\n") }));
+
+    expect(second.duplicate).toBe(true);
+    expect(second.document.id).toBe(first.document.id);
+    expect(second.passages.map((passage) => passage.id)).toEqual(first.passages.map((passage) => passage.id));
+    expect(second.removed).toEqual(first.removed);
+    const counts = await pool.query("SELECT (SELECT count(*) FROM documents)::int AS documents, (SELECT count(*) FROM passages)::int AS passages");
+    expect(counts.rows[0]).toEqual({ documents: 1, passages: first.passages.length });
+  });
+
+  it("reuses the original ingestion when the same transcript is ingested under another title", async () => {
+    const first = await ingestTranscript(transcriptInput({ suggestedTitle: "Founders #999 - Sam Walton" }));
+    expect(first.duplicate).toBe(false);
+
+    const second = await ingestTranscript(
+      transcriptInput({ suggestedTitle: "Founders - Sam Walton", personName: "Someone Else", additionalPeople: [{ name: "Another Subject", role: "subject" }] })
+    );
+
+    expect(second.duplicate).toBe(true);
+    expect(second.source).toEqual(first.source);
+    expect(second.document.id).toBe(first.document.id);
+    expect(second.passages.map((passage) => passage.id)).toEqual(first.passages.map((passage) => passage.id));
+    expect(second.person.name).toBe("David Senra");
+    expect(second.removed).toEqual(first.removed);
+
+    const { rows } = await pool.query(
+      `SELECT (SELECT count(*) FROM sources)::int AS sources, (SELECT count(*) FROM documents)::int AS documents,
+              (SELECT count(*) FROM passages)::int AS passages, (SELECT count(*) FROM people)::int AS people,
+              (SELECT count(*) FROM source_people)::int AS links,
+              (SELECT array_agg(title) FROM sources) AS titles`
+    );
+    expect(rows[0]).toEqual({
+      sources: 1,
+      documents: 1,
+      passages: first.passages.length,
+      people: 2,
+      links: 2,
+      titles: ["Founders #999 - Sam Walton"],
+    });
+  });
+
+  it("still links newly given people when the same transcript is ingested under the same title", async () => {
+    await ingestTranscript(transcriptInput());
+    const again = await ingestTranscript(transcriptInput({ additionalPeople: [{ name: "Helen Walton", role: "subject" }] }));
+
+    expect(again.duplicate).toBe(true);
+    const { rows } = await pool.query("SELECT p.name FROM source_people sp JOIN people p ON p.id = sp.person_id WHERE sp.source_id = $1 ORDER BY p.name", [
+      again.source.id,
+    ]);
+    expect(rows.map((row) => row.name)).toEqual(["David Senra", "Helen Walton", "Sam Walton"]);
+  });
+
+  it("creates a new source for a different transcript", async () => {
+    const first = await ingestTranscript(transcriptInput());
+    const other = await ingestTranscript(transcriptInput({ rawText: `${TRANSCRIPT}\nOne more line.`, suggestedTitle: "Founders #1000 - Sam Walton, part 2" }));
+
+    expect(other.duplicate).toBe(false);
+    expect(other.source.id).not.toBe(first.source.id);
+    expect(other.document.id).not.toBe(first.document.id);
+  });
+
+  it("rejects an additional person with an invalid role", async () => {
+    await expect(ingestTranscript(transcriptInput({ additionalPeople: [{ name: "Sam Walton", role: "hero" }] }))).rejects.toThrow(ValidationError);
   });
 });

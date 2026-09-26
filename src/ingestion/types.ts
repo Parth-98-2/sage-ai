@@ -85,6 +85,13 @@ export interface IngestTextInput {
   mimeType?: string;
 }
 
+export interface IngestTranscriptInput extends IngestTextInput {
+  /** People linked to the source besides personName, e.g. the episode's subject. */
+  additionalPeople?: Array<{ name: string; role: string }>;
+  /** Sponsor names whose reads are removed from passages; defaults to DEFAULT_SPONSORS. */
+  sponsors?: string[];
+}
+
 export interface IngestResult {
   person: PersonRow;
   source: SourceRow;
