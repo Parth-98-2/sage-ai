@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseCitationNumbers, resolveCitations } from "../src/answering/citations";
+import { checkAnswerSupport, parseCitationNumbers, resolveCitations } from "../src/answering/citations";
 import {
   ANSWER_SYSTEM_PROMPT,
   buildAnswerPrompt,
   buildEvidence,
   formatEvidence,
   INSUFFICIENT_EVIDENCE_MARKER,
+  SOURCES_HEADING,
 } from "../src/answering/prompt";
 import { InvalidModelResponseError } from "../src/answering/types";
 import type { SearchResult } from "../src/retrieval/types";
@@ -123,6 +124,82 @@ describe("formatEvidence attribution metadata", () => {
     expect(ANSWER_SYSTEM_PROMPT).toContain("they are not speaking in the source");
     expect(ANSWER_SYSTEM_PROMPT).toContain("Do not use outside or general knowledge");
   });
+
+  it("requires citations in source-backed answers but none in an insufficient-evidence reply", () => {
+    expect(ANSWER_SYSTEM_PROMPT).toContain(
+      "Every sentence in the FROM THE SOURCES section must cite the passage or passages that support it, using the evidence number in square brackets, e.g. [2] or [1][4]."
+    );
+    const rule = ANSWER_SYSTEM_PROMPT.split("\n").find((line) => line.includes(`reply with ${INSUFFICIENT_EVIDENCE_MARKER} on the first line`));
+    expect(rule).toContain("This reply is not a source-backed answer: it contains no citations, so write no evidence numbers and no square brackets in it.");
+    expect(rule).not.toMatch(/\bcit(e|ing)\b/);
+  });
+
+  it("requires a citation on every source sentence, never one citation for a paragraph", () => {
+    for (const rule of [
+      "Cite sentence by sentence. Each sentence must end with its own citation, even when several sentences come from the same passage.",
+      "A citation supports only the sentence it ends; it never covers the sentences before it.",
+      "Never put a single citation at the end of a paragraph of several sentences.",
+      'Three source sentences need three citations: "Sentence one. [9] Sentence two. [9] Sentence three. [9]".',
+      "Prefer short sentences that each state one claim from the evidence. Do not combine several claims into a paragraph and cite it once at the end.",
+      'Every sentence ends with its own citation, e.g. "Sentence one. [9] Sentence two. [9]"; never one citation for several sentences.',
+    ]) {
+      expect(ANSWER_SYSTEM_PROMPT).toContain(rule);
+    }
+  });
+
+  it("keeps the attribution and APPLICATION rules", () => {
+    expect(ANSWER_SYSTEM_PROMPT).toContain("When a host or author recounts, paraphrases or reads from another person's writing, say so.");
+    expect(ANSWER_SYSTEM_PROMPT).toContain(
+      "<Only if the question asks how the evidence applies to the asker's situation: your reasoning from the material above. No evidence numbers here. Do not name any person, company, product or number that is not in the evidence or the question.>"
+    );
+    expect(ANSWER_SYSTEM_PROMPT).toContain("Leave out the APPLICATION section when the question does not ask for application.");
+  });
+
+  it("requires third-person attribution or a named speaker for first-person source words", () => {
+    expect(ANSWER_SYSTEM_PROMPT).toContain(
+      "- Write the FROM THE SOURCES section in the third person. Never present a passage's first-person words (I, me, my, we, us, our) as your own. " +
+        'Either restate them in the third person ("Bloomberg describes his advances as evolutionary rather than revolutionary. [9]") ' +
+        `or keep them and name the speaker in the same sentence ("Senra reads from Bloomberg's book: every significant advance I or my companies ever made has been evolutionary. [9]").`
+    );
+    // The per-sentence citation and insufficient-evidence rules are unchanged.
+    expect(ANSWER_SYSTEM_PROMPT).toContain("Cite sentence by sentence. Each sentence must end with its own citation");
+    expect(ANSWER_SYSTEM_PROMPT).toContain("This reply is not a source-backed answer: it contains no citations");
+  });
+});
+
+describe("checkAnswerSupport per-sentence citations", () => {
+  // The live Bloomberg failure: the five-year-plan passage was supplied as evidence [9].
+  const PASSAGE =
+    "Don't devise a five-year plan or a great leap forward. central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either. " +
+    "Every significant advance I or my companies ever made has been evolutionary rather than revolutionary. Small earned steps, not big lucky hits.";
+  const evidence = buildEvidence([
+    ...Array.from({ length: 8 }, (_, i) => result(String(i + 1), `Unrelated passage ${i + 1}.`)),
+    result("9", PASSAGE),
+  ]);
+  const sources = (text: string) => ({ sources: text, application: null });
+  const [one, two, three] = [
+    "Central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either.",
+    // First-person words need a named speaker (see the attribution tests below).
+    "Senra reads that every significant advance I or my companies ever made has been evolutionary rather than revolutionary.",
+    "Small earned steps, not big lucky hits.",
+  ];
+
+  it("rejects one citation at the end of a three-sentence paragraph (the live failure)", () => {
+    expect(() => checkAnswerSupport(sources(`${one} ${two} ${three} [9]`), evidence, "q")).toThrow(InvalidModelResponseError);
+    expect(() => checkAnswerSupport(sources(`${one} ${two} ${three} [9]`), evidence, "q")).toThrow(
+      `source sentence has no citation: ${JSON.stringify(one)}`
+    );
+  });
+
+  it("rejects a paragraph where only some sentences carry their own citation", () => {
+    expect(() => checkAnswerSupport(sources(`${one} [9] ${two} ${three} [9]`), evidence, "q")).toThrow(
+      `source sentence has no citation: ${JSON.stringify(two)}`
+    );
+  });
+
+  it("accepts the same three sentences when each ends with its own citation", () => {
+    expect(() => checkAnswerSupport(sources(`${one} [9] ${two} [9] ${three} [9]`), evidence, "q")).not.toThrow();
+  });
 });
 
 describe("parseCitationNumbers", () => {
@@ -163,5 +240,126 @@ describe("resolveCitations", () => {
 
   it("names the invalid numbers in the error", () => {
     expect(() => resolveCitations([2, 5, 9], evidence)).toThrow(/\[5\], \[9\] \(valid: 1-3\)/);
+  });
+});
+
+describe("checkAnswerSupport across adjacent passages", () => {
+  // A story split across passages: the customer is named only in the first,
+  // what their traders did only in the second (which says "they", not "Merrill").
+  const evidence = buildEvidence([
+    result("1", "When we first installed it, Merrill assigned two traders to work with us."),
+    result("2", "When they said something didn't work, they could show us. Every day, our system got better as we fixed each problem they pointed out."),
+  ]);
+  const sources = (text: string) => ({ sources: text, application: null });
+
+  it("accepts a sentence whose name comes from one cited passage and whose action comes from another", () => {
+    expect(() =>
+      checkAnswerSupport(sources("Merrill assigned two traders, and every day Bloomberg fixed each problem they pointed out [1][2]."), evidence, "q")
+    ).not.toThrow();
+  });
+
+  it("rejects a name that appears only in a passage the sentence does not cite", () => {
+    expect(() => checkAnswerSupport(sources("Merrill's traders showed where it didn't work [2]."), evidence, "q")).toThrow(
+      /sentence cites \[2\] but "Merrill" does not appear in the cited evidence/
+    );
+  });
+});
+
+describe("checkAnswerSupport first-person attribution", () => {
+  // An exact excerpt of the real Q1 evidence [9]: Bloomberg passage #6, a podcast whose only recorded person is its host.
+  const Q1_PASSAGE =
+    "Take lots of chances and make lots of individual spur-of-the-moment decisions. This is such a great line. Don't devise a five-year plan or a great leap forward. " +
+    "central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either. Every significant advance I or my companies ever made has been " +
+    "evolutionary rather than revolutionary. Small earned steps, not big lucky hits. I stay flexible. A reporter asked me what we at Bloomberg had failed at.";
+  const q1Source = { ...result("9", "").source, title: "Founders #433 - How Michael Bloomberg Works (Clean)" };
+  const evidence = buildEvidence([
+    result("1", "Napoleon read constantly on campaign."),
+    ...Array.from({ length: 7 }, (_, i) => result(String(i + 2), `Unrelated passage ${i + 2}.`)),
+    result("9", Q1_PASSAGE, { source: q1Source }),
+  ]);
+  const check = (sources: string, application: string | null = null) => () => checkAnswerSupport({ sources, application }, evidence, "q");
+
+  // The real llama3.1:8b Q1 answer, which passed before this check existed.
+  const LLAMA_Q1 = [
+    "Central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either. [9]",
+    "Every significant advance I or my companies ever made has been evolutionary rather than revolutionary. [9]",
+    "Don't devise a five-year plan or a great leap forward. [9]",
+  ].join("\n");
+
+  it("rejects the real Q1 answer's unattributed first-person sentence", () => {
+    expect(check(LLAMA_Q1)).toThrow(
+      'source sentence uses first-person words ("I", "my") without naming who is speaking: ' +
+        '"Every significant advance I or my companies ever made has been evolutionary rather than revolutionary. [9]"'
+    );
+  });
+
+  it("accepts the attributed version of the Q1 answer", () => {
+    expect(
+      check(
+        "Bloomberg said that central planning didn't work for Stalin or Mao and wouldn't work for an entrepreneur either. [9] " +
+          "He described his advances as evolutionary rather than revolutionary. [9] " +
+          "He also said, 'Don't devise a five-year plan or a great leap forward.' [9]"
+      )
+    ).not.toThrow();
+  });
+
+  it("accepts first-person words with a recorded person named as the speaker", () => {
+    expect(check("Senra reads from Bloomberg's book: every significant advance I or my companies ever made has been evolutionary. [9]")).not.toThrow();
+  });
+
+  it("accepts a speaker the cited passage names mid-sentence, though not a recorded person", () => {
+    expect(check("Bloomberg writes that every significant advance I or my companies ever made has been evolutionary. [9]")).not.toThrow();
+  });
+
+  it("accepts a speaker given as a line label", () => {
+    expect(check("Bloomberg: every significant advance I or my companies ever made has been evolutionary. [9]")).not.toThrow();
+  });
+
+  it("does not take speaker names from the source title", () => {
+    expect(check("Founders says every significant advance I or my companies ever made has been evolutionary. [9]")).toThrow(
+      /without naming who is speaking/
+    );
+    expect(check("Works says every significant advance I or my companies ever made has been evolutionary. [9]")).toThrow(
+      /without naming who is speaking/
+    );
+  });
+
+  it("does not take speaker names from a capital that only starts a sentence in the passage", () => {
+    // "Take" and "Small" open sentences of the passage; they are not names.
+    expect(check("Small says every significant advance I or my companies ever made has been evolutionary. [9]")).toThrow(
+      /without naming who is speaking/
+    );
+  });
+
+  it("rejects a speaker named only in a passage the sentence does not cite", () => {
+    expect(check("Napoleon says every significant advance I or my companies ever made has been evolutionary. [9]")).toThrow(
+      InvalidModelResponseError
+    );
+  });
+
+  it("rejects a pronoun standing in for the speaker", () => {
+    expect(check("He wrote: every significant advance I or my companies ever made has been evolutionary. [9]")).toThrow(
+      /without naming who is speaking/
+    );
+  });
+
+  it("flags we, our and a capitalised My, but not the all-capitals US", () => {
+    const small = buildEvidence([result("1", "Terminals sold well in the US market, and we at Bloomberg kept building them for our customers.")]);
+    const one = (sources: string) => () => checkAnswerSupport({ sources, application: null }, small, "q");
+    expect(one("Terminals sold well in the US market. [1]")).not.toThrow();
+    expect(one("We kept building them. [1]")).toThrow('source sentence uses first-person words ("We")');
+    expect(one("Terminals were built for our customers. [1]")).toThrow('source sentence uses first-person words ("our")');
+    expect(one("My terminals sold well. [1]")).toThrow('source sentence uses first-person words ("My")');
+    expect(one("Senra says we kept building them for our customers. [1]")).not.toThrow();
+  });
+
+  it("does not apply to the APPLICATION section", () => {
+    expect(check("Bloomberg advised against a five-year plan. [9]", "I would plan only the next few steps.")).not.toThrow();
+  });
+
+  it("leaves the existing checks in front of it", () => {
+    expect(check("Every significant advance I or my companies ever made has been evolutionary.")).toThrow(/^source sentence has no citation/);
+    expect(check("Bloomberg writes that every advance I made was evolutionary. [42]")).toThrow(/sentence cites \[42\] but "Bloomberg"/);
+    expect(check("Like AppLovin, Bloomberg said every advance I made was evolutionary. [9]")).toThrow(/"Like", "AppLovin" do not appear in the cited evidence/);
   });
 });

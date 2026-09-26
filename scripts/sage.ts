@@ -25,8 +25,8 @@ const HELP = `Commands:
 Anything else is a question for Sage.`;
 
 const EXCERPT_CHARS = 160;
-/** Fewer passages than /answer's default, so a local model answers in roughly half the time. */
-export const DEFAULT_SESSION_LIMIT = 5;
+/** Passages retrieved per question unless changed with /limit; the same as /answer's default. */
+export const DEFAULT_SESSION_LIMIT = 10;
 
 /** The /limit argument as a retrieval limit /answer accepts, or null if it is not one. */
 export function parseLimit(arg: string): number | null {

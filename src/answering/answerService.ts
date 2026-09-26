@@ -2,7 +2,7 @@ import { ValidationError } from "../ingestion/types";
 import { getLanguageModel } from "../llm/languageModel";
 import { searchPassages } from "../retrieval/retrievalService";
 import { MAX_QUERY_LENGTH } from "../retrieval/types";
-import { parseCitationNumbers, resolveCitations } from "./citations";
+import { checkAnswerSupport, parseAnswerSections, parseCitationNumbers, resolveCitations, stripCitations } from "./citations";
 import { buildAnswerPrompt, buildEvidence, INSUFFICIENT_EVIDENCE_MARKER } from "./prompt";
 import {
   ANSWER_MAX_TOKENS,
@@ -12,7 +12,6 @@ import {
   InvalidModelResponseError,
   MAX_ANSWER_LIMIT,
   type AnswerResponse,
-  type AnswerStatus,
   type Evidence,
   type RawAnswerParams,
 } from "./types";
@@ -49,27 +48,20 @@ function passagesUsed(evidence: Evidence[]): AnswerResponse["retrieval"]["passag
 }
 
 /**
- * Splits the model's reply into status and answer text, enforcing the
- * contract from the system prompt: a reply either starts with the
- * insufficient-evidence marker or is a grounded answer with citations.
+ * The insufficient-evidence answer: the fixed sentence, then the model's
+ * explanation, if any, with every citation marker removed. It cites nothing,
+ * so the explanation's markers are never resolved into citations.
  */
-function interpretReply(text: string, citedCount: number): { status: AnswerStatus; answer: string } {
-  const reply = text.trim();
-  if (reply.startsWith(INSUFFICIENT_EVIDENCE_MARKER)) {
-    const explanation = reply.slice(INSUFFICIENT_EVIDENCE_MARKER.length).replace(/^[\s:.-]+/, "").trim();
-    return {
-      status: "insufficient_evidence",
-      answer: explanation ? `${INSUFFICIENT_EVIDENCE_ANSWER} ${explanation}` : INSUFFICIENT_EVIDENCE_ANSWER,
-    };
-  }
-  if (reply.length === 0) throw new InvalidModelResponseError("model returned an empty answer");
-  if (citedCount === 0) throw new InvalidModelResponseError("model answered without citing any evidence");
-  return { status: "answered", answer: reply };
+function insufficientEvidenceAnswer(reply: string): string {
+  const explanation = stripCitations(reply.slice(INSUFFICIENT_EVIDENCE_MARKER.length))
+    .replace(/^[\s:.-]+/, "")
+    .trim();
+  return explanation ? `${INSUFFICIENT_EVIDENCE_ANSWER} ${explanation}` : INSUFFICIENT_EVIDENCE_ANSWER;
 }
 
 /**
  * question → hybrid retrieval → numbered evidence → grounded model call →
- * citation validation → response. Stateless: nothing is stored.
+ * citation and support validation → response. Stateless: nothing is stored.
  */
 export async function answerQuestion(raw: RawAnswerParams): Promise<AnswerResponse> {
   const question = validateQuestion(raw.question);
@@ -99,8 +91,17 @@ export async function answerQuestion(raw: RawAnswerParams): Promise<AnswerRespon
   if (reply.stopReason === "refusal") throw new InvalidModelResponseError("model declined to answer");
   if (reply.stopReason === "max_tokens") throw new InvalidModelResponseError("model answer was cut off at the token limit");
 
-  const citations = resolveCitations(parseCitationNumbers(reply.text), evidence);
-  const { status, answer } = interpretReply(reply.text, citations.length);
+  // The contract from the system prompt: a reply either starts with the
+  // insufficient-evidence marker (and cites nothing) or is a grounded
+  // two-section answer whose sources section passes the support check.
+  const text = reply.text.trim();
+  if (text.startsWith(INSUFFICIENT_EVIDENCE_MARKER)) {
+    return { question, status: "insufficient_evidence", answer: insufficientEvidenceAnswer(text), citations: [], retrieval, model: model.modelId };
+  }
+  if (text.length === 0) throw new InvalidModelResponseError("model returned an empty answer");
 
-  return { question, status, answer, citations, retrieval, model: model.modelId };
+  const citations = resolveCitations(parseCitationNumbers(text), evidence);
+  checkAnswerSupport(parseAnswerSections(text), evidence, question);
+
+  return { question, status: "answered", answer: text, citations, retrieval, model: model.modelId };
 }

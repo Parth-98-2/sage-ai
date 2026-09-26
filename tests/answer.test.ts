@@ -1,7 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
-import { ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, buildEvidence } from "../src/answering/prompt";
+import {
+  ANSWER_SYSTEM_PROMPT,
+  APPLICATION_HEADING,
+  buildAnswerPrompt,
+  buildEvidence,
+  SOURCES_HEADING,
+} from "../src/answering/prompt";
 import { ANSWER_MAX_TOKENS, INSUFFICIENT_EVIDENCE_ANSWER } from "../src/answering/types";
 import { pool } from "../src/db/pool";
 import { embedMissingPassages } from "../src/embeddings/backfill";
@@ -75,9 +81,9 @@ function answer(body: unknown) {
   return request(app).post("/answer").send(body as object);
 }
 
-/** Replies with a citation to whichever evidence block holds `needle`. */
+/** Replies with a sources section citing whichever evidence block holds `needle`. */
 function citing(needle: string, sentence: string) {
-  return createFakeLanguageModel((req) => `${sentence} [${evidenceNumberContaining(req.prompt, needle)}]`);
+  return createFakeLanguageModel((req) => `${SOURCES_HEADING}\n${sentence} [${evidenceNumberContaining(req.prompt, needle)}]`);
 }
 
 describe("POST /answer grounded answers", () => {
@@ -91,7 +97,7 @@ describe("POST /answer grounded answers", () => {
     expect(res.status).toBe(200);
     expect(res.body.question).toBe("What did Bloomberg say about five-year plans?");
     expect(res.body.status).toBe("answered");
-    expect(res.body.answer).toMatch(/^On the podcast, host David Senra recounts .* \[\d+\]$/);
+    expect(res.body.answer).toMatch(/^FROM THE SOURCES:\nOn the podcast, host David Senra recounts .* \[\d+\]$/);
     expect(res.body.model).toBe("fake-llm@1");
     expect(res.body.retrieval.mode).toBe("hybrid");
     expect(res.body.retrieval.passagesUsed.length).toBeGreaterThan(0);
@@ -103,7 +109,7 @@ describe("POST /answer grounded answers", () => {
     const { bloomberg, salomon } = await seedCorpus();
     llm = createFakeLanguageModel(
       (req) =>
-        `He opposed five-year plans [${evidenceNumberContaining(req.prompt, "five-year plan")}] ` +
+        `${SOURCES_HEADING}\nHe opposed five-year plans [${evidenceNumberContaining(req.prompt, "five-year plan")}] ` +
         `and was fired from Salomon [${evidenceNumberContaining(req.prompt, "Salomon Brothers")}].`
     );
     setLanguageModel(llm);
@@ -128,6 +134,31 @@ describe("POST /answer grounded answers", () => {
       expect(citation.people).toEqual([{ id: ingested.person.id, name: "David Senra", role: "host" }]);
       expect(ingested.document.raw_text.slice(citation.passage.char_start, citation.passage.char_end)).toBe(citation.passage.text);
     }
+  });
+
+  it("accepts a two-section answer: structured, cited source lines and an uncited application", async () => {
+    await seedCorpus();
+    llm = createFakeLanguageModel((req) => {
+      const fired = evidenceNumberContaining(req.prompt, "Salomon Brothers");
+      const plans = evidenceNumberContaining(req.prompt, "five-year plan");
+      return [
+        `**${SOURCES_HEADING}**`,
+        `- Person: Bloomberg, at Salomon Brothers [${fired}]`,
+        `- What happened: after fifteen years he was fired and walked away with ten million dollars [${fired}].`,
+        `- What he believed: make tactical plans for the next few steps, never a five-year plan [${plans}].`,
+        "",
+        APPLICATION_HEADING,
+        "For building something valuable with AI, plan only your next few steps and adjust as you learn.",
+      ].join("\n");
+    });
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "How should I plan when building something valuable with AI? Give the person, what happened and what they believed." });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("answered");
+    expect(res.body.answer).toContain(APPLICATION_HEADING);
+    expect(res.body.citations.map((c: { passage: { text: string } }) => c.passage.text)).toEqual([FIRED, FIVE_YEAR]);
   });
 
   it("does not expose the prompt or evidence text outside the cited passages", async () => {
@@ -156,13 +187,86 @@ describe("POST /answer invalid model responses", () => {
     expect(res.body.answer).toBeUndefined();
   });
 
-  it("rejects an answer with no citations", async () => {
+  it("rejects an answer without the FROM THE SOURCES section", async () => {
     await seedCorpus();
-    setLanguageModel(createFakeLanguageModel("Bloomberg disliked long plans."));
+    setLanguageModel(
+      createFakeLanguageModel((req) => `Bloomberg disliked long plans [${evidenceNumberContaining(req.prompt, "five-year plan")}].`)
+    );
 
     const res = await answer({ question: "What did Bloomberg say about five-year plans?" });
     expect(res.status).toBe(502);
-    expect(res.body.error).toMatch(/without citing/);
+    expect(res.body.error).toMatch(/FROM THE SOURCES heading exactly once/);
+  });
+
+  it("rejects a source sentence without a citation", async () => {
+    await seedCorpus();
+    setLanguageModel(
+      createFakeLanguageModel(
+        (req) =>
+          `${SOURCES_HEADING}\nBloomberg advised against five-year plans [${evidenceNumberContaining(req.prompt, "five-year plan")}]. ` +
+          "He was also fired from Salomon Brothers."
+      )
+    );
+
+    const res = await answer({ question: "What did Bloomberg say about five-year plans?" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('source sentence has no citation: "He was also fired from Salomon Brothers."');
+    expect(res.body.answer).toBeUndefined();
+  });
+
+  it("rejects a source sentence naming a company that is not in the cited passage", async () => {
+    await seedCorpus();
+    setLanguageModel(
+      createFakeLanguageModel(
+        (req) =>
+          `${SOURCES_HEADING}\nPerson: Bloomberg [${evidenceNumberContaining(req.prompt, "five-year plan")}]\n` +
+          `What he did: like AppLovin, he avoided five-year plans [${evidenceNumberContaining(req.prompt, "five-year plan")}].`
+      )
+    );
+
+    const res = await answer({ question: "Tell me about a person: what they did and what happened." });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(/^sentence cites \[\d+\] but "AppLovin" does not appear in the cited evidence: "like AppLovin/);
+  });
+
+  it("rejects a source sentence whose number is not in the cited passage", async () => {
+    await seedCorpus();
+    setLanguageModel(
+      createFakeLanguageModel((req) => `${SOURCES_HEADING}\nBloomberg was fired after 20 years [${evidenceNumberContaining(req.prompt, "Salomon")}].`)
+    );
+
+    const res = await answer({ question: "When was Bloomberg fired?" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(/"20" does not appear in the cited evidence/);
+  });
+
+  it("rejects an APPLICATION section that cites evidence", async () => {
+    await seedCorpus();
+    setLanguageModel(
+      createFakeLanguageModel((req) => {
+        const n = evidenceNumberContaining(req.prompt, "five-year plan");
+        return `${SOURCES_HEADING}\nBloomberg advised against five-year plans [${n}].\n\n${APPLICATION_HEADING}\nPlan only your next few steps [${n}].`;
+      })
+    );
+
+    const res = await answer({ question: "How should I plan?" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(/APPLICATION section must not cite evidence, but cites \[\d+\]/);
+  });
+
+  it("rejects an APPLICATION section that brings in an outside company", async () => {
+    await seedCorpus();
+    setLanguageModel(
+      createFakeLanguageModel(
+        (req) =>
+          `${SOURCES_HEADING}\nBloomberg advised against five-year plans [${evidenceNumberContaining(req.prompt, "five-year plan")}].\n\n` +
+          `${APPLICATION_HEADING}\nDo what AppLovin did and plan only the next few steps.`
+      )
+    );
+
+    const res = await answer({ question: "How should I plan?" });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('the APPLICATION section names "AppLovin", which is not in the evidence or the question');
   });
 
   it.each([
@@ -175,6 +279,58 @@ describe("POST /answer invalid model responses", () => {
     const res = await answer({ question: "five-year plan" });
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(message);
+  });
+});
+
+describe("POST /answer first-person attribution", () => {
+  // An exact excerpt of the real Q1 evidence: Bloomberg passage #6, read by the podcast host.
+  const Q1_PASSAGE =
+    "Take lots of chances and make lots of individual spur-of-the-moment decisions. This is such a great line. Don't devise a five-year plan or a great leap forward. " +
+    "central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either. Every significant advance I or my companies ever made has been " +
+    "evolutionary rather than revolutionary. Small earned steps, not big lucky hits. I stay flexible. A reporter asked me what we at Bloomberg had failed at.";
+  const QUESTION = "What did Michael Bloomberg say about five-year plans?";
+
+  /** Replies with `lines` under the sources heading, each ending with the evidence number of the Q1 passage. */
+  function replying(lines: string[]) {
+    return createFakeLanguageModel((req) => {
+      const n = evidenceNumberContaining(req.prompt, "Stalin");
+      return `${SOURCES_HEADING}\n${lines.map((line) => `${line} [${n}]`).join("\n")}`;
+    });
+  }
+
+  it("rejects the real llama3.1:8b Q1 answer, whose first-person sentence names no speaker", async () => {
+    await ingestEpisode(Q1_PASSAGE, "founders-433-michael-bloomberg-q1");
+    llm = replying([
+      "Central planning didn't work for Stalin or Mao, and it won't work for an entrepreneur either.",
+      "Every significant advance I or my companies ever made has been evolutionary rather than revolutionary.",
+      "Don't devise a five-year plan or a great leap forward.",
+    ]);
+    setLanguageModel(llm);
+
+    const res = await answer({ question: QUESTION });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatch(
+      /^source sentence uses first-person words \("I", "my"\) without naming who is speaking: "Every significant advance I or my companies ever made has been evolutionary rather than revolutionary\. \[\d+\]"$/
+    );
+  });
+
+  it("accepts the attributed version, citing the Q1 passage", async () => {
+    await ingestEpisode(Q1_PASSAGE, "founders-433-michael-bloomberg-q1");
+    llm = replying([
+      "Bloomberg said that central planning didn't work for Stalin or Mao and wouldn't work for an entrepreneur either.",
+      "Senra reads from Bloomberg's book: every significant advance I or my companies ever made has been evolutionary rather than revolutionary.",
+      "Bloomberg also said, 'Don't devise a five-year plan or a great leap forward.'",
+    ]);
+    setLanguageModel(llm);
+
+    const res = await answer({ question: QUESTION });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("answered");
+    expect(res.body.answer).toContain("Don't devise a five-year plan or a great leap forward.");
+    expect(res.body.citations).toHaveLength(1);
+    expect(res.body.citations[0].passage.text).toBe(Q1_PASSAGE);
   });
 });
 
@@ -203,23 +359,20 @@ describe("POST /answer insufficient evidence", () => {
     expect(llm.requests).toHaveLength(0);
   });
 
-  it("returns the model's explicit insufficient-evidence answer, validating any citations in it", async () => {
+  it("returns the model's explicit insufficient-evidence answer with its explanation", async () => {
     await seedCorpus();
-    llm = createFakeLanguageModel(
-      (req) =>
-        `INSUFFICIENT_EVIDENCE\nThe passages cover Bloomberg's career [${evidenceNumberContaining(req.prompt, "Salomon")}] but not his favorite color.`
-    );
+    llm = createFakeLanguageModel("INSUFFICIENT_EVIDENCE\nThe passages cover Bloomberg's career but not his favorite color.");
     setLanguageModel(llm);
 
     const res = await answer({ question: "What was Bloomberg's favorite color?" });
 
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("insufficient_evidence");
-    expect(res.body.answer).toMatch(new RegExp(`^${INSUFFICIENT_EVIDENCE_ANSWER.replace(/\./g, "\\.")} The passages cover`));
-    expect(res.body.answer).not.toContain("INSUFFICIENT_EVIDENCE");
-    expect(res.body.citations).toHaveLength(1);
-    expect(res.body.citations[0].passage.text).toContain("Salomon");
-    expect(res.body.model).toBe("fake-llm@1");
+    expect(res.body).toMatchObject({
+      status: "insufficient_evidence",
+      answer: `${INSUFFICIENT_EVIDENCE_ANSWER} The passages cover Bloomberg's career but not his favorite color.`,
+      citations: [],
+      model: "fake-llm@1",
+    });
   });
 
   it("accepts a bare insufficient-evidence marker", async () => {
@@ -231,12 +384,70 @@ describe("POST /answer insufficient evidence", () => {
     expect(res.body).toMatchObject({ status: "insufficient_evidence", answer: INSUFFICIENT_EVIDENCE_ANSWER, citations: [] });
   });
 
-  it("still rejects an invalid citation inside an insufficient-evidence answer", async () => {
+  it("never resolves a citation in the explanation, even one naming a supplied passage", async () => {
     await seedCorpus();
-    setLanguageModel(createFakeLanguageModel("INSUFFICIENT_EVIDENCE\nOnly passage [42] mentions him."));
+    llm = createFakeLanguageModel(
+      (req) =>
+        `INSUFFICIENT_EVIDENCE\nThe passages cover Bloomberg's career [${evidenceNumberContaining(req.prompt, "Salomon")}] but not his favorite color.`
+    );
+    setLanguageModel(llm);
 
     const res = await answer({ question: "What was Bloomberg's favorite color?" });
-    expect(res.status).toBe(502);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("insufficient_evidence");
+    expect(res.body.citations).toEqual([]);
+    expect(res.body.answer).toBe(`${INSUFFICIENT_EVIDENCE_ANSWER} The passages cover Bloomberg's career but not his favorite color.`);
+  });
+
+  it.each([
+    ["a run of markers after the fixed sentence", "INSUFFICIENT_EVIDENCE\nThe supplied evidence is insufficient to answer the question. [1][2][3]", "The supplied evidence is insufficient to answer the question."],
+    ["markers alone", "INSUFFICIENT_EVIDENCE [1][2][3]", ""],
+    ["grouped and unsupplied numbers", "INSUFFICIENT_EVIDENCE: Only [1, 3] mention him [42], and neither says it [2].", "Only mention him, and neither says it."],
+  ])("drops every citation marker: %s", async (_, reply, explanation) => {
+    await seedCorpus();
+    setLanguageModel(createFakeLanguageModel(reply));
+
+    const res = await answer({ question: "What was Bloomberg's favorite color?" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("insufficient_evidence");
+    expect(res.body.citations).toEqual([]);
+    expect(res.body.answer).toBe(explanation ? `${INSUFFICIENT_EVIDENCE_ANSWER} ${explanation}` : INSUFFICIENT_EVIDENCE_ANSWER);
+    expect(res.body.answer).not.toMatch(/\[\s*\d/);
+  });
+
+  it("returns no citations for an out-of-corpus question, whatever the explanation cites", async () => {
+    await seedCorpus();
+    llm = createFakeLanguageModel((req) => {
+      const count = (req.prompt.match(/<evidence number="/g) ?? []).length;
+      const all = Array.from({ length: count }, (_, i) => `[${i + 1}]`).join("");
+      return `INSUFFICIENT_EVIDENCE\nThe passages discuss Bloomberg and Napoleon ${all}, not Australia.`;
+    });
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "What is the capital of Australia?" });
+
+    expect(llm.requests).toHaveLength(1);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("insufficient_evidence");
+    expect(res.body.citations).toEqual([]);
+    expect(res.body.answer).toBe(`${INSUFFICIENT_EVIDENCE_ANSWER} The passages discuss Bloomberg and Napoleon, not Australia.`);
+    expect(res.body.retrieval.passagesUsed.length).toBeGreaterThan(0);
+  });
+
+  it("still resolves the citations of a grounded answer", async () => {
+    await seedCorpus();
+    llm = citing("five-year plan", "Bloomberg advised against five-year plans.");
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "What did Bloomberg say about five-year plans?" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("answered");
+    expect(res.body.citations).toHaveLength(1);
+    expect(res.body.citations[0].number).toBe(evidenceNumberContaining(llm.requests[0].prompt, "five-year plan"));
+    expect(res.body.citations[0].passage.text).toBe(FIVE_YEAR);
   });
 });
 

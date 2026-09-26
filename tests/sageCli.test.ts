@@ -3,8 +3,8 @@ import { DEFAULT_SESSION_LIMIT, parseLimit } from "../scripts/sage";
 import { MAX_ANSWER_LIMIT } from "../src/answering/types";
 
 describe("sage session /limit", () => {
-  it("defaults to 5 passages", () => {
-    expect(DEFAULT_SESSION_LIMIT).toBe(5);
+  it("defaults to 10 passages", () => {
+    expect(DEFAULT_SESSION_LIMIT).toBe(10);
   });
 
   it.each([
