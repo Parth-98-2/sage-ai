@@ -1,3 +1,4 @@
+import { selectionTerms } from "./evidenceSelection";
 import { InvalidModelResponseError, type Citation, type Evidence } from "./types";
 
 /** A citation group: [3] or [1, 4]. Any other bracketed text is not a citation. */
@@ -192,6 +193,144 @@ function listTerms(terms: string[]): string {
   return terms.map((term) => `"${term}"`).join(", ");
 }
 
+const citeList = (numbers: number[]) => numbers.map((n) => `[${n}]`).join("");
+
+/** Double quotation marks, straight or curly. Single quotes are left alone: they double as apostrophes. */
+const QUOTE_MARK = /["“”]/g;
+
+/**
+ * The quoted spans of a sentence, and the sentence without them. Marks pair
+ * up in order; an unpaired mark is a quotation split across sentences, so it
+ * quotes to the end of the sentence (an opening mark) or from its start (a
+ * closing one).
+ */
+function splitQuotes(text: string): { quotes: string[]; rest: string } {
+  const marks = [...text.matchAll(QUOTE_MARK)].map((match) => match.index!);
+  const ranges: Array<[number, number]> = [];
+  if (marks.length % 2 === 1) {
+    if (/(?:^|[\s([{:—-])$/.test(text.slice(0, marks[0]))) ranges.push([marks.pop()! + 1, text.length]);
+    else ranges.push([0, marks.shift()!]);
+  }
+  for (let i = 0; i + 1 < marks.length; i += 2) ranges.push([marks[i] + 1, marks[i + 1]]);
+  ranges.sort((a, b) => a[0] - b[0]);
+
+  let rest = "";
+  let at = 0;
+  for (const [start, end] of ranges) {
+    rest += `${text.slice(at, Math.max(at, start - 1))} `;
+    at = end + 1;
+  }
+  rest += text.slice(at);
+  return { quotes: ranges.map(([start, end]) => text.slice(start, end)).filter((q) => /[A-Za-z0-9]/.test(q)), rest };
+}
+
+/** Transcript timestamps that interrupt passage text mid-sentence. */
+const TIMESTAMP = /starting point is \d{1,2}:\d{2}(?::\d{2})?/gi;
+
+/** Lowercased words joined by single spaces, ignoring punctuation and timestamps: the unit of verbatim comparison. */
+function wordSequence(text: string): string {
+  const words = text.replace(TIMESTAMP, " ").toLowerCase().replace(/[’‘]/g, "'").match(/[a-z0-9]+(?:'[a-z0-9]+)*/g) ?? [];
+  return words.join(" ");
+}
+
+/** The parts of a quotation, split at ellipses, that do not appear word for word in any of `passages`. */
+function unquotedParts(quotation: string, passages: string[]): string[] {
+  const sequences = passages.map((text) => ` ${wordSequence(text)} `);
+  return quotation
+    .split(/\.{3}|…/)
+    .map((part) => wordSequence(part))
+    .filter((part) => part !== "" && !sequences.some((sequence) => sequence.includes(` ${part} `)));
+}
+
+/**
+ * Claims that the evidence does not say something. Retrieved passages are
+ * positive evidence only: a passage not mentioning something never shows the
+ * person did not say it, so such a claim is never source-backed.
+ */
+const ABSENCE_CLAIM = new RegExp(
+  [
+    String.raw`\b(?:does|do|did|is|are|was|were|has|have|had)(?:\s+not|n['’]t)\s+(?:\w+\s+){0,2}?(?:mention|say|said|discuss|address|quote|cover|provide|contain|state|talk|describe|specify|include|refer|speak|comment|explain)`,
+    String.raw`\bthere\s+(?:is|are|was|were)\s+no\b`,
+    String.raw`\bno\s+(?:mention|discussion|reference|evidence|information|quotes?|details?)\b`,
+    String.raw`\bnever\s+(?:mentions?|mentioned|says|said|discuss(?:es|ed)?|address(?:es|ed)?)\b`,
+    String.raw`\b(?:evidence|passages?|sources?|text|excerpts?|material)\s+(?:does|do|did)(?:\s+not|n['’]t)\b`,
+  ].join("|"),
+  "i"
+);
+
+/** Verbs that present words or views as someone's. */
+const SPEECH_VERBS =
+  "says|said|states|stated|writes|wrote|notes|noted|argues|argued|advises|advised|believes|believed|explains|explained|" +
+  "recounts|recounted|emphasizes|emphasized|admits|admitted|claims|claimed|describes|described|mentions|mentioned|tells|told|" +
+  "asks|asked|insists|insisted|declares|declared|quotes|quoted|reads|recalls|recalled|warns|warned|adds|added|replies|replied|" +
+  "repeats|repeated|puts it";
+const NAME = String.raw`(?:[A-Z][A-Za-z]*|[a-z]+[A-Z][A-Za-z]*)`;
+const WORKS = String.raw`book|autobiography|memoir|letters?|words|maxims?|quote|line|writing|advice`;
+/** "Bloomberg said", "Bloomberg also writes", "according to Bloomberg", "Bloomberg's book": the named person is credited with words. */
+const ATTRIBUTION = new RegExp(
+  String.raw`\b(${NAME})\s+(?:(?:also|then|later|once|often|repeatedly|explicitly|directly|further|famously|simply|just)\s+)?(?:${SPEECH_VERBS})\b` +
+    String.raw`|\baccording to (?:the\s+)?(${NAME})\b` +
+    String.raw`|\b(${NAME})['’]s\s+(?:${WORKS})\b`,
+  "g"
+);
+/** How a passage itself marks someone as speaking or being quoted. */
+const PASSAGE_SPEAKER = new RegExp(
+  String.raw`\b(${NAME})(?:['’]s)?\s+(?:also\s+|then\s+|just\s+)?(?:${SPEECH_VERBS})\b` +
+    String.raw`|\b(?:${SPEECH_VERBS}|according to|quoting|quote from|line from|words of|quote by|line by|book by)\s+(?:${NAME}\s+)?(${NAME})\b` +
+    String.raw`|\b(${NAME})['’]s\s+(?:${WORKS})\b`,
+  "g"
+);
+
+/** The capitalised, non-common names captured by `pattern` in `text`. */
+function capturedNames(pattern: RegExp, text: string): string[] {
+  const names: string[] = [];
+  for (const match of text.matchAll(pattern)) {
+    const name = match.slice(1).find((group) => group !== undefined);
+    if (name && !COMMON_WORDS.has(name.toLowerCase())) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Who cited passages can support crediting with words: their recorded
+ * people, the people their source titles name (the episode's subject, whose
+ * words the host reads), and anyone the passage text itself presents as
+ * speaking or being quoted. A name merely mentioned in a passage does not count.
+ */
+function sourceNames(items: Evidence[]): Set<string> {
+  const names = new Set<string>();
+  for (const { result } of items) {
+    for (const person of result.people) for (const [word] of person.name.matchAll(NAME_WORD)) names.add(word.toLowerCase());
+    // Titles may be lowercase slugs ("founders-433-michael-bloomberg"), so every title word counts.
+    for (const word of result.source.title.toLowerCase().match(/[a-z]+/g) ?? []) if (!COMMON_WORDS.has(word)) names.add(word);
+    for (const name of capturedNames(PASSAGE_SPEAKER, result.passage.text)) names.add(name.toLowerCase());
+  }
+  return names;
+}
+
+/** Stemmed terms this short carry too little to place a sentence's wording in a passage. */
+const LOCALITY_MIN_TERM_LENGTH = 4;
+/** Distinctive terms a sentence must share with one uncited passage before its citation is judged misplaced. */
+const LOCALITY_MIN_TERMS = 2;
+
+/**
+ * An obvious citation mismatch: at least LOCALITY_MIN_TERMS of the sentence's
+ * terms appear in no cited passage but in exactly one other supplied passage,
+ * the same one. Paraphrase is untouched: words the cited passage lacks only
+ * count against it when they point unambiguously at another passage.
+ */
+function misplacedWording(text: string, cited: number[], passageTerms: Map<number, Set<string>>): { number: number; terms: string[] } | null {
+  const citedTerms = cited.map((number) => passageTerms.get(number)).filter((terms): terms is Set<string> => terms !== undefined);
+  const pointers = new Map<number, string[]>();
+  for (const term of selectionTerms(text.replace(CITATION_GROUP, " "))) {
+    if (term.length < LOCALITY_MIN_TERM_LENGTH || citedTerms.some((terms) => terms.has(term))) continue;
+    const holders = [...passageTerms].filter(([, terms]) => terms.has(term)).map(([number]) => number);
+    if (holders.length === 1) pointers.set(holders[0], [...(pointers.get(holders[0]) ?? []), term]);
+  }
+  for (const [number, terms] of pointers) if (terms.length >= LOCALITY_MIN_TERMS) return { number, terms };
+  return null;
+}
+
 /**
  * Deterministic support check for a grounded reply. It cannot judge meaning;
  * it enforces what can be checked mechanically:
@@ -201,12 +340,21 @@ function listTerms(terms: string[]): string {
  * - a sources sentence with first-person words (I, my, we, ...) names its
  *   speaker: a recorded person of a cited passage, or someone that passage
  *   names (see speakerNames);
+ * - a sources sentence makes no absence claim ("does not mention", "there is
+ *   no ..."): retrieved passages cannot establish what was never said;
+ * - every quotation in a sources sentence appears word for word in a cited
+ *   passage (case, punctuation and transcript timestamps aside);
+ * - a person a sources sentence credits with words ("X said", "according to
+ *   X", "X's book") is a speaker or source of a cited passage (see sourceNames);
+ * - a sources sentence's distinctive wording does not point unambiguously at
+ *   a passage it does not cite (see misplacedWording);
  * - the application section cites nothing, and its names and numbers appear
  *   in the evidence or the question.
  * Violations reject the whole reply rather than being repaired.
  */
 export function checkAnswerSupport(sections: AnswerSections, evidence: Evidence[], question: string): void {
   const byNumber = new Map(evidence.map((item) => [item.number, item]));
+  const passageTerms = new Map(evidence.map((item) => [item.number, selectionTerms(item.result.passage.text)]));
 
   for (const { label, text } of splitSentences(sections.sources)) {
     const cited = parseCitationNumbers(text);
@@ -220,14 +368,43 @@ export function checkAnswerSupport(sections: AnswerSections, evidence: Evidence[
           `${missing.length === 1 ? "does" : "do"} not appear in the cited evidence: ${quote(text)}`
       );
     }
+    const citedItems = cited.flatMap((number) => (byNumber.has(number) ? [byNumber.get(number)!] : []));
     const firstPerson = [...new Set(text.match(FIRST_PERSON) ?? [])];
     if (firstPerson.length > 0) {
-      const speakers = speakerNames(cited.flatMap((number) => (byNumber.has(number) ? [byNumber.get(number)!] : [])));
+      const speakers = speakerNames(citedItems);
       if (![...`${label} ${text}`.matchAll(NAME_WORD)].some(([word]) => speakers.has(word.toLowerCase()))) {
         throw new InvalidModelResponseError(
           `source sentence uses first-person words (${listTerms(firstPerson)}) without naming who is speaking: ${quote(text)}`
         );
       }
+    }
+
+    const { quotes, rest } = splitQuotes(text.replace(CITATION_GROUP, " "));
+    if (ABSENCE_CLAIM.test(rest)) {
+      throw new InvalidModelResponseError(`source sentence claims what the evidence does not say, which retrieved passages cannot show: ${quote(text)}`);
+    }
+    for (const quotation of quotes) {
+      const absent = unquotedParts(quotation, citedItems.map(({ result }) => result.passage.text));
+      if (absent.length > 0) {
+        throw new InvalidModelResponseError(`quoted text ${quote(quotation.trim())} does not appear verbatim in the cited evidence ${citeList(cited)}`);
+      }
+    }
+    const credited = capturedNames(ATTRIBUTION, rest);
+    if (credited.length > 0) {
+      const sources = sourceNames(citedItems);
+      const unsupported = [...new Set(credited.filter((name) => !sources.has(name.toLowerCase())))];
+      if (unsupported.length > 0) {
+        throw new InvalidModelResponseError(
+          `source sentence credits ${listTerms(unsupported)} with words, but the cited evidence ${citeList(cited)} ` +
+            `does not present ${unsupported.length === 1 ? "them" : "any of them"} as a speaker or source: ${quote(text)}`
+        );
+      }
+    }
+    const misplaced = misplacedWording(text, cited, passageTerms);
+    if (misplaced) {
+      throw new InvalidModelResponseError(
+        `sentence cites ${citeList(cited)} but its wording (${listTerms(misplaced.terms)}) comes from [${misplaced.number}]: ${quote(text)}`
+      );
     }
   }
 

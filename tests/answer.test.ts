@@ -464,16 +464,15 @@ describe("POST /answer retrieval", () => {
     expect(embedder.calls).toContainEqual({ kind: "query", text: "five-year plan" });
   });
 
-  it("retrieves 10 passages by default and honours an explicit limit", async () => {
+  it("retrieves 20 candidates by default and honours an explicit limit", async () => {
     for (let i = 0; i < 12; i++) await ingestEpisode(`Episode ${i} discusses plans and planning.`, `episode-${i}`);
     setLanguageModel(citing("Episode", "Plans."));
 
-    const byDefault = await answer({ question: "plans" });
-    expect(searchSpy.mock.calls[0][0]).toMatchObject({ limit: "10" });
-    expect(byDefault.body.retrieval.passagesUsed).toHaveLength(10);
+    await answer({ question: "plans" });
+    expect(searchSpy.mock.calls[0][0]).toMatchObject({ limit: "20" });
 
-    const limited = await answer({ question: "plans", limit: 3 });
-    expect(limited.body.retrieval.passagesUsed.map((p: { number: number }) => p.number)).toEqual([1, 2, 3]);
+    await answer({ question: "plans", limit: 7 });
+    expect(searchSpy.mock.calls[1][0]).toMatchObject({ limit: "7" });
   });
 
   it("passes person and source filters through to retrieval", async () => {
@@ -540,6 +539,110 @@ describe("POST /answer retrieval", () => {
     expect(llm.requests[0].prompt).toContain(`<passage>\n${longText}\n</passage>`);
     expect(llm.requests[0].prompt).not.toContain(results[0].snippet);
     expect(llm.requests[0].prompt).not.toContain("**");
+  });
+});
+
+describe("POST /answer evidence selection", () => {
+  const NAMES = ["Alder", "Birch", "Cedar", "Dogwood", "Elm", "Fir", "Ginkgo", "Hazel", "Juniper", "Larch", "Maple", "Oak"];
+
+  /** Twelve one-passage episodes, each naming one person nothing else mentions. */
+  async function seedNamedEpisodes() {
+    for (const [i, name] of NAMES.entries()) await ingestEpisode(`${name} discusses plans and planning.`, `episode-${i}`);
+  }
+
+  /** The evidence numbers in a prompt, in order. */
+  const blockNumbers = (prompt: string) => [...prompt.matchAll(/<evidence number="(\d+)">/g)].map((m) => Number(m[1]));
+  /** The one seeded name that evidence block `number` holds. */
+  const namesInPrompt = (prompt: string) => NAMES.filter((name) => prompt.includes(`${name} discusses`));
+  const nameInBlock = (prompt: string, number: number) =>
+    namesInPrompt(prompt).find((name) => evidenceNumberContaining(prompt, name) === number)!;
+
+  async function retrieved(call = 0) {
+    return ((await searchSpy.mock.results[call].value) as SearchResponse).results;
+  }
+
+  it("sends the model exactly 6 selected passages, numbered 1..6, with their candidate ranks", async () => {
+    await seedNamedEpisodes();
+    llm = createFakeLanguageModel((req) => `${SOURCES_HEADING}\n${nameInBlock(req.prompt, 1)} discusses plans. [1]`);
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "What does everyone say about plans?" });
+
+    expect(res.status).toBe(200);
+    const results = await retrieved();
+    expect(results).toHaveLength(12);
+    expect(blockNumbers(llm.requests[0].prompt)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(llm.requests[0].prompt).toMatch(/^Evidence passages \(6\):/);
+    const used = res.body.retrieval.passagesUsed;
+    expect(used.map((p: { number: number }) => p.number)).toEqual([1, 2, 3, 4, 5, 6]);
+    for (const p of used) expect(results[p.retrievalRank - 1].passage.id).toBe(p.passage_id);
+  });
+
+  it("bypasses selection for an explicit limit of 3: the top 3 candidates in retrieval order", async () => {
+    await seedNamedEpisodes();
+    llm = createFakeLanguageModel((req) => `${SOURCES_HEADING}\n${nameInBlock(req.prompt, 1)} discusses plans. [1]`);
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "What does everyone say about plans?", limit: 3 });
+
+    expect(res.status).toBe(200);
+    expect(searchSpy.mock.calls[0][0]).toMatchObject({ limit: "3" });
+    const results = await retrieved();
+    expect(blockNumbers(llm.requests[0].prompt)).toEqual([1, 2, 3]);
+    const used = res.body.retrieval.passagesUsed;
+    expect(used.map((p: { passage_id: string }) => p.passage_id)).toEqual(results.map((r) => r.passage.id));
+    expect(used.map((p: { retrievalRank: number }) => p.retrievalRank)).toEqual([1, 2, 3]);
+  });
+
+  it("rejects a citation to a passage that was retrieved but not selected", async () => {
+    await seedNamedEpisodes();
+    setLanguageModel(createFakeLanguageModel(`${SOURCES_HEADING}\nSomeone discusses plans. [7]`));
+
+    const res = await answer({ question: "What does everyone say about plans?" });
+
+    expect((await retrieved()).length).toBeGreaterThanOrEqual(7);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("model cited evidence that was not supplied: [7] (valid: 1-6)");
+  });
+
+  it("resolves each citation to the exact passage shown under that number", async () => {
+    await seedNamedEpisodes();
+    llm = createFakeLanguageModel(
+      (req) => `${SOURCES_HEADING}\n${[1, 2, 3, 4, 5, 6].map((n) => `${nameInBlock(req.prompt, n)} discusses plans. [${n}]`).join("\n")}`
+    );
+    setLanguageModel(llm);
+
+    const res = await answer({ question: "What does everyone say about plans?" });
+
+    expect(res.status).toBe(200);
+    const { prompt } = llm.requests[0];
+    expect(res.body.citations.map((c: { number: number }) => c.number)).toEqual([1, 2, 3, 4, 5, 6]);
+    for (const citation of res.body.citations) {
+      expect(evidenceNumberContaining(prompt, citation.passage.text)).toBe(citation.number);
+      const supplied = res.body.retrieval.passagesUsed.find((p: { number: number }) => p.number === citation.number);
+      expect(supplied.passage_id).toBe(citation.passage.id);
+    }
+  });
+
+  it("does not let a dropped passage license a name in the APPLICATION section", async () => {
+    await seedNamedEpisodes();
+    const reply = (applied: (prompt: string) => string) =>
+      createFakeLanguageModel(
+        (req) => `${SOURCES_HEADING}\n${nameInBlock(req.prompt, 1)} discusses plans. [1]\n\n${APPLICATION_HEADING}\nAsk how ${applied(req.prompt)} would plan.`
+      );
+
+    // Control: a name from a selected passage is accepted.
+    setLanguageModel(reply((prompt) => nameInBlock(prompt, 2)));
+    expect((await answer({ question: "What does everyone say about plans?" })).status).toBe(200);
+
+    // A name retrieved as a candidate but dropped by selection is not.
+    let dropped = "";
+    setLanguageModel(reply((prompt) => (dropped = NAMES.find((name) => !namesInPrompt(prompt).includes(name))!)));
+    const res = await answer({ question: "What does everyone say about plans?" });
+
+    expect((await retrieved(1)).some((r) => r.passage.text.includes(dropped))).toBe(true);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe(`the APPLICATION section names "${dropped}", which is not in the evidence or the question`);
   });
 });
 

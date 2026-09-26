@@ -1,10 +1,12 @@
 import { ValidationError } from "../ingestion/types";
 import { getLanguageModel } from "../llm/languageModel";
 import { searchPassages } from "../retrieval/retrievalService";
-import { MAX_QUERY_LENGTH } from "../retrieval/types";
+import { MAX_QUERY_LENGTH, type SearchResult } from "../retrieval/types";
 import { checkAnswerSupport, parseAnswerSections, parseCitationNumbers, resolveCitations, stripCitations } from "./citations";
+import { selectEvidence } from "./evidenceSelection";
 import { buildAnswerPrompt, buildEvidence, INSUFFICIENT_EVIDENCE_MARKER } from "./prompt";
 import {
+  ANSWER_EVIDENCE_COUNT,
   ANSWER_MAX_TOKENS,
   ANSWER_RETRIEVAL_MODE,
   DEFAULT_ANSWER_LIMIT,
@@ -35,7 +37,7 @@ function validateLimit(limit: unknown): number {
   return limit;
 }
 
-function passagesUsed(evidence: Evidence[]): AnswerResponse["retrieval"]["passagesUsed"] {
+function passagesUsed(evidence: Evidence[], candidates: SearchResult[]): AnswerResponse["retrieval"]["passagesUsed"] {
   return evidence.map(({ number, result }) => ({
     number,
     passage_id: result.passage.id,
@@ -44,6 +46,7 @@ function passagesUsed(evidence: Evidence[]): AnswerResponse["retrieval"]["passag
     source_title: result.source.title,
     ordinal: result.passage.ordinal,
     score: result.score,
+    retrievalRank: candidates.indexOf(result) + 1,
   }));
 }
 
@@ -60,7 +63,7 @@ function insufficientEvidenceAnswer(reply: string): string {
 }
 
 /**
- * question → hybrid retrieval → numbered evidence → grounded model call →
+ * question → hybrid retrieval → evidence selection → numbered evidence → grounded model call →
  * citation and support validation → response. Stateless: nothing is stored.
  */
 export async function answerQuestion(raw: RawAnswerParams): Promise<AnswerResponse> {
@@ -77,8 +80,11 @@ export async function answerQuestion(raw: RawAnswerParams): Promise<AnswerRespon
     mode: ANSWER_RETRIEVAL_MODE,
   });
 
-  const evidence = buildEvidence(results);
-  const retrieval = { mode: ANSWER_RETRIEVAL_MODE, passagesUsed: passagesUsed(evidence) };
+  // Only the selected passages reach the model, numbered 1..N in selection
+  // order; citations and support checks see exactly those. A limit at or
+  // below the evidence count leaves nothing to select from.
+  const evidence = buildEvidence(selectEvidence(question, results, ANSWER_EVIDENCE_COUNT));
+  const retrieval = { mode: ANSWER_RETRIEVAL_MODE, passagesUsed: passagesUsed(evidence, results) };
 
   if (evidence.length === 0) {
     return { question, status: "insufficient_evidence", answer: INSUFFICIENT_EVIDENCE_ANSWER, citations: [], retrieval, model: null };

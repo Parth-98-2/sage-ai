@@ -363,3 +363,83 @@ describe("checkAnswerSupport first-person attribution", () => {
     expect(check("Like AppLovin, Bloomberg said every advance I made was evolutionary. [9]")).toThrow(/"Like", "AppLovin" do not appear in the cited evidence/);
   });
 });
+
+describe("checkAnswerSupport grounding checks", () => {
+  // Real passage excerpts, each read by the host: [1] Bloomberg #6 (with a transcript
+  // timestamp mid-sentence, as in the corpus), [2] Napoleon #1, [3] Napoleon #8.
+  const BLOOMBERG =
+    "Take lots of chances and make lots of individual spur-of-the-moment decisions. This is such a great line. Don't devise a five-year plan or a great leap forward. " +
+    "central planning didn't work for Stalin\nStarting point is 00:15:46\nor Mao, and it won't work for an entrepreneur either. Every significant advance I or my companies " +
+    "ever made has been evolutionary rather than revolutionary. Small earned steps, not big lucky hits.";
+  const NAPOLEON_HESITATION =
+    "He talks about this over and over. He says, hesitation is fatal. Once an action has begun, it must be followed through with the utmost exertion of the will. " +
+    "Is it because they are lucky that great men become great? No, but being great, they have been able to master luck.";
+  const NAPOLEON_PLANS =
+    "And this is something again where Napoleon repeats this. Most of the time, I had no definitive plans, but only projects. All great events hang by a single thread.";
+  const napoleonSource = { ...result("2", "").source, title: "founders-432-napoleon" };
+  const evidence = buildEvidence([
+    result("1", BLOOMBERG),
+    result("2", NAPOLEON_HESITATION, { source: napoleonSource }),
+    result("3", NAPOLEON_PLANS, { source: napoleonSource }),
+  ]);
+  const check = (sources: string) => () => checkAnswerSupport({ sources, application: null }, evidence, "q");
+
+  it("rejects quoted text that is not in the cited passage", () => {
+    expect(check(`Bloomberg wrote, "don't ever make a five-year plan." [1]`)).toThrow(
+      `quoted text "don't ever make a five-year plan." does not appear verbatim in the cited evidence [1]`
+    );
+    // Verbatim, but from a passage the sentence does not cite.
+    expect(check('Bloomberg wrote, "hesitation is fatal." [1]')).toThrow(/does not appear verbatim in the cited evidence \[1\]/);
+  });
+
+  it("accepts a verbatim quotation despite case, punctuation, a transcript timestamp or a split across sentences", () => {
+    expect(check('Bloomberg writes: "Central planning didn\'t work for Stalin or Mao." [1]')).not.toThrow();
+    expect(check('Bloomberg wrote, "Don\'t devise a five-year plan or a great leap forward. [1] Central planning didn\'t work for Stalin or Mao." [1]')).not.toThrow();
+  });
+
+  it("rejects a sentence whose wording plainly comes from a passage it does not cite", () => {
+    // The live Q14 failure: Napoleon's words cited to another Napoleon passage.
+    expect(check("Napoleon stated that hesitation is fatal once an action has begun. [3]")).toThrow(
+      /^sentence cites \[3\] but its wording \(.*"hesitation".*\) comes from \[2\]/
+    );
+    expect(check("Napoleon stated that hesitation is fatal once an action has begun. [2]")).not.toThrow();
+  });
+
+  it("rejects unsupported absence claims", () => {
+    expect(check("Bloomberg does not explicitly mention making five-year plans. [1]")).toThrow(/claims what the evidence does not say/);
+    expect(check("Bloomberg did not directly say anything about getting fired. [1]")).toThrow(/claims what the evidence does not say/);
+    expect(check("The evidence does not describe his reaction. [1]")).toThrow(/claims what the evidence does not say/);
+    expect(check("There is no discussion of his next venture. [1]")).toThrow(/claims what the evidence does not say/);
+    expect(check("The passage doesn't cover the later years. [1]")).toThrow(/claims what the evidence does not say/);
+  });
+
+  it("allows negation that reports the evidence, including inside a quotation", () => {
+    expect(check("Bloomberg says central planning didn't work for Stalin or Mao. [1]")).not.toThrow();
+    expect(check('Napoleon says, "No, but being great, they have been able to master luck." [2]')).not.toThrow();
+  });
+
+  it("accepts a faithful paraphrase that shares little wording with the passage", () => {
+    expect(check("Bloomberg advises against drawing up long-range schemes and prefers modest gains. [1]")).not.toThrow();
+    expect(check("Napoleon warns that wavering once a move is underway is deadly. [2]")).not.toThrow();
+  });
+
+  it("rejects crediting words to someone the cited passage only mentions", () => {
+    expect(check("Stalin said that central planning won't work for an entrepreneur. [1]")).toThrow(
+      'source sentence credits "Stalin" with words, but the cited evidence [1] does not present them as a speaker or source'
+    );
+    expect(check("Central planning didn't work for an entrepreneur, according to Mao. [1]")).toThrow(/credits "Mao" with words/);
+  });
+
+  it("accepts words credited to the source's subject, a recorded person, or someone the passage quotes", () => {
+    expect(check("Bloomberg says central planning won't work for an entrepreneur. [1]")).not.toThrow();
+    expect(check("Host David Senra recounts Bloomberg's line about central planning. [1]")).not.toThrow();
+    const quoted = buildEvidence([result("1", "There's a great line by Steve Jobs where he says life will hit you in the head with a brick.")]);
+    expect(() => checkAnswerSupport({ sources: "Jobs said life will hit you in the head with a brick. [1]", application: null }, quoted, "q")).not.toThrow();
+  });
+
+  it("accepts an attributed first-person quotation", () => {
+    expect(
+      check('Senra reads from Bloomberg\'s book: "Every significant advance I or my companies ever made has been evolutionary rather than revolutionary." [1]')
+    ).not.toThrow();
+  });
+});

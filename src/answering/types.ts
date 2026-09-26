@@ -1,7 +1,10 @@
 import type { SearchResult } from "../retrieval/types";
 
-export const DEFAULT_ANSWER_LIMIT = 10;
+/** Hybrid candidates retrieved per question; `limit` overrides it. */
+export const DEFAULT_ANSWER_LIMIT = 20;
 export const MAX_ANSWER_LIMIT = 20;
+/** Passages selected from the candidates for the model (see evidenceSelection); a limit at or below it skips selection. */
+export const ANSWER_EVIDENCE_COUNT = 6;
 export const ANSWER_MAX_TOKENS = 16000;
 /** Answering always retrieves with hybrid (lexical + semantic, fused) retrieval. */
 export const ANSWER_RETRIEVAL_MODE = "hybrid" as const;
@@ -44,6 +47,8 @@ export interface PassageUsed {
   source_title: string;
   ordinal: number;
   score: number;
+  /** 1-based position among the hybrid candidates, before evidence selection. */
+  retrievalRank: number;
 }
 
 export type AnswerStatus = "answered" | "insufficient_evidence";
